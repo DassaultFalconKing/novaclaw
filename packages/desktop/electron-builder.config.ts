@@ -32,6 +32,8 @@ const APP_IDS = {
   prod: "app.novaclaw.desktop",
 } as const
 
+const PACMAN_DEPENDS = ["gtk3", "libnotify", "nss", "libxss", "libxtst", "xdg-utils", "at-spi2-core", "libsecret"]
+
 const getBase = (appId: string): Configuration => ({
   artifactName: "novaclaw-desktop-${os}-${arch}.${ext}",
   directories: {
@@ -99,6 +101,7 @@ const getBase = (appId: string): Configuration => ({
   linux: {
     icon: `resources/icons`,
     category: "Development",
+    synopsis: "NovaClaw — a local-first AI agent OS",
     executableName: appId,
     desktop: {
       entry: {
@@ -107,7 +110,7 @@ const getBase = (appId: string): Configuration => ({
         StartupWMClass: appId,
       },
     },
-    target: ["AppImage", "deb", "rpm"],
+    target: ["AppImage", "deb", "rpm", "pacman"],
   },
 })
 
@@ -122,6 +125,12 @@ function getConfig() {
         appId,
         productName: "NovaClaw Dev",
         rpm: { packageName: "novaclaw-dev" },
+        pacman: {
+          packageName: "novaclaw-dev",
+          compression: "zstd",
+          artifactName: "novaclaw-dev-${version}-${arch}.pkg.tar.zst",
+          depends: PACMAN_DEPENDS,
+        },
       }
     }
     case "beta": {
@@ -132,6 +141,12 @@ function getConfig() {
         protocols: { name: "NovaClaw Beta", schemes: ["novaclaw"] },
         publish: { provider: "github", owner: "nancysadkov", repo: "novaclaw-beta", channel: "latest" },
         rpm: { packageName: "novaclaw-beta" },
+        pacman: {
+          packageName: "novaclaw-beta",
+          compression: "zstd",
+          artifactName: "novaclaw-beta-${version}-${arch}.pkg.tar.zst",
+          depends: PACMAN_DEPENDS,
+        },
       }
     }
     case "prod": {
@@ -142,6 +157,12 @@ function getConfig() {
         protocols: { name: "NovaClaw", schemes: ["novaclaw"] },
         publish: { provider: "github", owner: "nancysadkov", repo: "novaclaw", channel: "latest" },
         rpm: { packageName: "novaclaw" },
+        pacman: {
+          packageName: "novaclaw",
+          compression: "zstd",
+          artifactName: "novaclaw-${version}-${arch}.pkg.tar.zst",
+          depends: PACMAN_DEPENDS,
+        },
       }
     }
   }
