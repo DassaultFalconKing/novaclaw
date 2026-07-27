@@ -29,7 +29,7 @@ function getNetworkIPs() {
 }
 
 export const WebCommand = effectCmd({
-  command: "web",
+  command: ["web", "$0"],
   builder: (yargs) => withNetworkOptions(yargs),
   describe: "start novaclaw server and open web interface",
   // Server loads instances per-request via x-novaclaw-directory header — no
