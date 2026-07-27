@@ -1,5 +1,4 @@
 import { createHash } from "node:crypto"
-import { createRequire } from "node:module"
 import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs"
 import { join } from "node:path"
 
@@ -125,7 +124,9 @@ let memfsCounter = 0
 const loadWasm = (): Promise<any> => {
   if (!initPromise) {
     initPromise = (async () => {
-      const require = createRequire(import.meta.url)
+      // Keep this a static CommonJS require. Ladybug exports the Node sync entry for `require` only;
+      // createRequire(import.meta.url) hid the dependency from Bun's compiled-executable bundler,
+      // so a single-file NovaClaw tried to resolve a node_modules package beside itself at runtime.
       const lbug = require("@ladybugdb/wasm-core/nodejs/sync")
       await lbug.init()
       lbugModule = lbug
@@ -174,18 +175,12 @@ export class WasmMemory {
     const dim = opts.dim ?? DEFAULT_DIM
     const lbug = await loadWasm()
     const FS = lbug.getFS()
-    // ⚠️ Load-bearing: the emscripten working dir is backed by a HIDDEN PERSISTENT store that survives
-    // across processes (measured: reusing a fixed path like `/kbmem0` showed 6 stale nodes on a "fresh"
-    // open, because a plain counter resets to 0 each process and re-hits the prior run's leftover DB
-    // file). So the scratch path must be UNIQUE PER PROCESS — pid + a per-open counter — so a new
-    // instance never collides with a stale file. Durability is OUR real-disk snapshot, restored below;
-    // this scratch dir is throwaway.
-    const memfsDir = `/kbmem_${process.pid}_${memfsCounter++}`
-    try {
-      FS.mkdir(memfsDir)
-    } catch {
-      /* exists */
-    }
+    // The Node WASM build exposes `/` through a read-only backend, while `/tmp` is its writable
+    // scratch filesystem. Creating `/kbmem_*` therefore failed with EROFS and the engine degraded to
+    // disabled on every boot. Keep each open isolated under the writable mount; durability still
+    // comes exclusively from the real-disk snapshot restored below.
+    const memfsDir = `/tmp/novaclaw-kbmem-${process.pid}-${Date.now()}-${memfsCounter++}`
+    FS.mkdir(memfsDir)
     // Self-heal a stale/incompatible artifact at realDir. Memory is a re-derivable tier (§4.9), so a
     // path we can't restore from must never brick the engine — we discard it and start fresh instead:
     //   • a single FILE named `graph` left by the RETIRED native sidecar (native Ladybug DB = one file;
@@ -696,6 +691,16 @@ export class WasmMemory {
       await this.db.close?.()
     } catch {
       /* already closed */
+    }
+    try {
+      const FS = this.lbug.getFS()
+      for (const file of FS.readdir(this.memfsDir)) {
+        if (file === "." || file === "..") continue
+        FS.unlink(`${this.memfsDir}/${file}`)
+      }
+      FS.rmdir(this.memfsDir)
+    } catch {
+      /* best-effort scratch cleanup */
     }
   }
 }
