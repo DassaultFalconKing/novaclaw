@@ -263,7 +263,7 @@ export const RunCommand = effectCmd({
         .map((arg) => (arg.includes(" ") ? `"${arg.replace(/"/g, '\\"')}"` : arg))
         .join(" ")
 
-      const root = Filesystem.resolve(process.env.PWD ?? process.cwd())
+      const root = Filesystem.resolve(process.cwd())
       const directory = (() => {
         if (!args.dir) return args.attach ? undefined : root
         if (args.attach) return args.dir
@@ -306,7 +306,7 @@ export const RunCommand = effectCmd({
           }
 
           const content = await (async () => {
-            if (!args.attach) return
+            if (isDirectory) return
             const handle = await open(resolvedPath, "r")
             try {
               const opened = await handle.stat()

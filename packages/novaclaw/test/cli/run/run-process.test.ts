@@ -319,6 +319,27 @@ describe("novaclaw run (non-interactive subprocess)", () => {
   )
 
   cliIt.concurrent(
+    "local mode materializes text file contents before prompt admission",
+    ({ home, llm, novaclaw }) =>
+      Effect.gen(function* () {
+        const source = `${home}/local-spec.md`
+        const sentinel = "local attachment sentinel"
+        yield* Effect.promise(() => Bun.write(source, sentinel))
+        yield* llm.text("attachment received")
+
+        const result = yield* novaclaw.run("read the attachment", {
+          extraArgs: [`--file=${source}`, "--"],
+        })
+
+        novaclaw.expectExit(result, 0)
+        const input = JSON.stringify(yield* llm.inputs)
+        expect(input).toContain(sentinel)
+        expect(input).not.toContain(`file://${source}`)
+      }),
+    60_000,
+  )
+
+  cliIt.concurrent(
     "attach mode rejects local directories before prompt admission",
     ({ home, novaclaw }) =>
       Effect.gen(function* () {
