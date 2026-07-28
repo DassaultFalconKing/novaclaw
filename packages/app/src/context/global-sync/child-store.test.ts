@@ -170,6 +170,39 @@ describe("createChildStoreManager", () => {
     }
   })
 
+  test("treats exited sessions as settled", () => {
+    let manager: ReturnType<typeof createChildStoreManager> | undefined
+
+    const dispose = createOwner((owner) => {
+      manager = createChildStoreManager({
+        owner,
+        scope: ServerScope.local,
+        persist,
+        isBooting: () => false,
+        isLoadingSessions: () => false,
+        onBootstrap() {},
+        onMcp() {},
+        onDispose() {},
+        translate: (key) => key,
+        queryOptions: queryOptionsApi,
+        global: { provider },
+      })
+    })
+
+    try {
+      if (!manager) throw new Error("manager required")
+      const [store, setStore] = manager.child("/project", { bootstrap: false })
+
+      expect(store.session_working("root")).toBe(false)
+      setStore("session_status", "root", { type: "busy" })
+      expect(store.session_working("root")).toBe(true)
+      setStore("session_status", "root", { type: "exited" })
+      expect(store.session_working("root")).toBe(false)
+    } finally {
+      dispose()
+    }
+  })
+
   test("enables MCP only when requested for the directory", () => {
     let manager: ReturnType<typeof createChildStoreManager> | undefined
     const offset = querySingles.length
