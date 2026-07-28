@@ -38,6 +38,21 @@ export interface Settlement {
   readonly outputPaths?: ReadonlyArray<string>
 }
 
+export const UNKNOWN_TOOL_LIST_LIMIT = 12
+
+export const unknownToolMessage = (name: string, available: Iterable<string>): string => {
+  const names = Array.from(available).sort()
+  if (names.length === 0)
+    return `Unknown tool: ${name}. No tools are available in this turn. Do not invent a tool or write a call as text.`
+  const shown = names.slice(0, UNKNOWN_TOOL_LIST_LIMIT)
+  const label =
+    names.length > shown.length ? `Available tools (first ${shown.length} of ${names.length})` : "Available tools"
+  return (
+    `Unknown tool: ${name}. ${label}: ${shown.join(", ")}. ` +
+    `Use one of these exact advertised names; do not invent a tool or write a call as text.`
+  )
+}
+
 export class Service extends Context.Service<Service, Interface>()("@novaclaw/v2/ToolRegistry") {}
 
 const registryLayer = Layer.effect(
@@ -121,7 +136,9 @@ const registryLayer = Layer.effect(
           settle: (input) => {
             const registration = registrations.get(input.call.name)
             if (registration) return settleWith(input, registration.identity)
-            return Effect.succeed({ result: { type: "error", value: `Unknown tool: ${input.call.name}` } })
+            return Effect.succeed({
+              result: { type: "error", value: unknownToolMessage(input.call.name, registrations.keys()) },
+            })
           },
         }
       }),

@@ -71,6 +71,12 @@ OFF restores the legacy one-phase `exit`, disables the one-shot `finish_reason=l
 and disables the corrective steer for tool calls printed as Markdown/XML. It never executes text as
 a command.
 
+An unknown structured tool name never reaches a handler. The captured registry snapshot returns an
+error with a sorted, bounded list of the exact tool names advertised for that provider turn. The
+runner persists the error and continues, so a local model can repair the call and complete the task
+without guessing another name. When no tools are available, the result says so and explicitly
+forbids inventing a call or printing one as text.
+
 The 2026-07-28 local llama.cpp check separated parser failure from model choice: the active Q6 9B
 model returned structured `tool_calls` with both `tool_choice=required` and the normal auto mode.
 Therefore an intermittent Markdown call in a long task is not evidence of a permanently broken wire

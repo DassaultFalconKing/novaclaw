@@ -1,4 +1,4 @@
-import { describe, expect } from "bun:test"
+import { describe, expect, test } from "bun:test"
 import { Tool } from "@novaclaw/core/tool/tool"
 import { AgentV2 } from "@novaclaw/core/agent"
 import { AppNodeBuilder } from "@novaclaw/core/effect/app-node-builder"
@@ -59,6 +59,26 @@ const make = (permission?: string) => {
 }
 
 describe("ToolRegistry", () => {
+  test("returns a bounded deterministic repair for an invented tool name", () => {
+    const message = ToolRegistry.unknownToolMessage(
+      "invented",
+      Array.from({ length: 14 }, (_, index) => `tool_${String(13 - index).padStart(2, "0")}`),
+    )
+    expect(message).toContain("Unknown tool: invented")
+    expect(message).toContain("Available tools (first 12 of 14): tool_00, tool_01")
+    expect(message).toContain("tool_11")
+    expect(message).not.toContain("tool_12")
+    expect(message).not.toContain("tool_13")
+    expect(message).toContain("exact advertised names")
+    expect(message).toContain("do not invent")
+  })
+
+  test("does not suggest a call when the turn has no advertised tools", () => {
+    expect(ToolRegistry.unknownToolMessage("invented", [])).toBe(
+      "Unknown tool: invented. No tools are available in this turn. Do not invent a tool or write a call as text.",
+    )
+  })
+
   it.effect("filters disabled tools with edit aliases and ordered wildcard precedence", () =>
     Effect.gen(function* () {
       const service = yield* ToolRegistry.Service
@@ -178,7 +198,11 @@ describe("ToolRegistry", () => {
           ...identity,
           call: { type: "tool-call", id: "missing", name: "missing", input: {} },
         }),
-      ).toEqual({ type: "error", value: "Unknown tool: missing" })
+      ).toEqual({
+        type: "error",
+        value:
+          "Unknown tool: missing. Available tools: failed. Use one of these exact advertised names; do not invent a tool or write a call as text.",
+      })
 
       yield* service.register({
         defect: Tool.make({
