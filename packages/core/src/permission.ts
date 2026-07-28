@@ -89,7 +89,7 @@ export class CorrectedError extends Schema.TaggedErrorClass<CorrectedError>()("P
  * (`config-resolve.ts` → `UNATTENDED_CONFINED_RULES`); the generic wording tells the model to "ask
  * the user to adjust permissions", which is exactly the advice that hangs an unattended run.
  */
-export const DenialReason = Schema.Literal("unattended-confined")
+export const DenialReason = Schema.Literals(["unattended-confined"])
 export type DenialReason = typeof DenialReason.Type
 
 export class DeniedError extends Schema.TaggedErrorClass<DeniedError>()("PermissionV2.DeniedError", {
