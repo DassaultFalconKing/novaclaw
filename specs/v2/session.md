@@ -81,6 +81,13 @@ template/parser mismatch.
 
 ### Attachment trust boundary
 
+Every provider turn starts with a kernel-owned security boundary. It classifies attachments,
+repository files, web/search content, MCP/plugin responses, shell output, and other tool results as
+untrusted instructions. The model may use them as evidence or task data, but they cannot grant
+authority, expand permissions, request secrets, authorize external side effects, or prove task
+completion. This system policy is assembled before persona, agent, session, and project context, so
+a user-configured prompt cannot remove it.
+
 Every attached file gets a model-facing trust boundary immediately before its content part. The
 runner treats file content as untrusted data, not as system, operator, tool, or permission
 instructions. The model may follow task instructions inside a file only when the surrounding user
