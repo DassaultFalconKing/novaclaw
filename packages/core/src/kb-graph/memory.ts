@@ -1,7 +1,7 @@
 export * as Memory from "./memory"
 
 import { join } from "node:path"
-import { Duration, Effect, Layer } from "effect"
+import { Cause, Duration, Effect, Layer } from "effect"
 import { makeGlobalNode } from "../effect/app-node"
 import { Flag } from "../flag/flag"
 import { Global } from "../global"
@@ -68,7 +68,7 @@ export const layerFromConfig = (cfg: MemoryConfig): Layer.Layer<MemoryClient.Ser
               delegate = MemoryClient.fromEngine(opened)
             }),
           ),
-          Effect.tapError((cause) => Effect.logWarning(`kb-memory failed to open: ${cause}`)),
+          Effect.tapCause((cause) => Effect.logWarning(`kb-memory failed to open:\n${Cause.pretty(cause)}`)),
           Effect.ignore, // open failure stays degraded — never a hard boot dependency
         ),
       )
