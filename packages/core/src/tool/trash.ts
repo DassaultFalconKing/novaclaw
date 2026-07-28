@@ -70,6 +70,8 @@ export const layer = Layer.effectDiscard(
                 yield* permission.assert({
                   action: name,
                   resources: [target.resource],
+                  targetPaths: [target.canonical],
+                  attachmentPaths: [...(context.attachmentPaths ?? [])],
                   save: ["*"],
                   sessionID: context.sessionID,
                   agent: context.agent,

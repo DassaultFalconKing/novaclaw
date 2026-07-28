@@ -101,6 +101,7 @@ import { AppProcess } from "../../process"
 import { ChildProcess } from "effect/unstable/process"
 import { makeLocationNode } from "../../effect/app-node"
 import { llmClient } from "../../effect/app-node-platform"
+import { AttachmentPaths } from "./attachment-paths"
 
 // Ordering can only choose among retrieved candidates — fetch wider than the recall budget.
 
@@ -680,6 +681,7 @@ export const layer = Layer.effect(
       const tierHint = TierScaffold.tierScaffold(tier)
       const entries = yield* SessionHistory.entriesForRunner(db, session.id, system.baselineSeq)
       const context = entries.map((entry) => entry.message)
+      const attachmentPaths = AttachmentPaths.resolve(context)
       // Auto-recall (kb-graph §1.3.1): surface relevant memories (this session ∪ global) into the
       // system prompt so the model "just remembers" — no kb-tool call needed. Best-effort: memory
       // off/unavailable → no block, the turn proceeds. Budgeted DOWN for weak models (the JH floor).
@@ -900,6 +902,7 @@ export const layer = Layer.effect(
                   sessionID: session.id,
                   agent: agent.id,
                   assistantMessageID,
+                  attachmentPaths,
                   call: event,
                 }),
               ).pipe(
