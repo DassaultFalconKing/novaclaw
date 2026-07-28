@@ -1535,8 +1535,9 @@ export const dict = {
   "settings.models.new.open": "Add models",
   "settings.models.new.title": "Add models",
   "settings.models.new.description": "Pick where your models come from.",
-  "settings.models.new.custom.name": "Custom endpoint",
-  "settings.models.new.custom.description": "Any OpenAI-compatible server — vLLM, llama.cpp, Ollama, LM Studio…",
+  "settings.models.new.custom.name": "Local model container",
+  "settings.models.new.custom.description":
+    "Docker, Podman or a host process running vLLM, llama.cpp, Ollama or LM Studio — any OpenAI-compatible URL works.",
   "settings.models.new.connect.title": "Connect to {{name}}",
   "settings.models.new.connect.description":
     "NovaClaw checks the connection and lists the models it serves, so you can pick which to add.",

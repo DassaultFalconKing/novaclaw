@@ -1,26 +1,16 @@
 import { useParams } from "@solidjs/router"
-import { onCleanup } from "solid-js"
 import { useCommand } from "@/context/command"
 import { useLanguage } from "@/context/language"
 import { useDialog } from "@novaclaw/ui/context/dialog"
+import { DialogSettings } from "@/components/settings-v2"
 
 export function useSettingsDialog(defaultTab?: string) {
   const dialog = useDialog()
   const params = useParams<{ id?: string }>()
-  let run = 0
-  let dead = false
-
-  onCleanup(() => {
-    dead = true
-  })
 
   return () => {
-    const current = ++run
     const sessionID = params.id
-    void import("@/components/settings-v2").then((module) => {
-      if (dead || run !== current) return
-      void dialog.show(() => <module.DialogSettings sessionID={sessionID} defaultTab={defaultTab} />)
-    })
+    void dialog.show(() => <DialogSettings sessionID={sessionID} defaultTab={defaultTab} />)
   }
 }
 

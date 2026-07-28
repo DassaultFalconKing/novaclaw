@@ -111,7 +111,12 @@ export const DialogNewModel: Component<{
 
   const chooseCustom = () => {
     setPresetID("custom")
-    setForm({ baseURL: "", providerID: "", name: "", apiKey: "" })
+    setForm({
+      baseURL: "http://localhost:8000/v1",
+      providerID: "local-model",
+      name: t("settings.models.new.custom.name"),
+      apiKey: "",
+    })
     setResult(undefined)
     setError(undefined)
     setStep("connect")
@@ -192,6 +197,7 @@ export const DialogNewModel: Component<{
       <TextInputV2
         type={p.type ?? "text"}
         appearance="base"
+        aria-label={t(`settings.models.new.field.${p.field}.label`)}
         value={form[p.field]}
         onInput={(event) => setForm(p.field, event.currentTarget.value)}
         placeholder={p.placeholder ?? t(`settings.models.new.field.${p.field}.placeholder`)}
@@ -245,6 +251,7 @@ export const DialogNewModel: Component<{
             <button
               type="button"
               data-action="new-model-custom"
+              aria-label={t("settings.models.new.custom.name")}
               class="flex flex-col items-start gap-1.5 rounded-xl px-3.5 py-3 text-left ring-1 ring-v2-border-border-base hover:bg-v2-background-bg-layer-01 transition-colors"
               onClick={chooseCustom}
             >
