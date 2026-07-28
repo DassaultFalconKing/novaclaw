@@ -242,7 +242,14 @@ export function switchStrict(
 
 // A per-session harness-feature toggle (the composer's Tuning control — introspection ·
 // quality · affective). `enabled: null` clears the override back to inherit (global config).
-export type SessionFeatureName = "introspection" | "quality" | "affective" | "thinkingBudget" | "surgicalEdits" | "askBeforeChanges"
+export type SessionFeatureName =
+  | "introspection"
+  | "quality"
+  | "affective"
+  | "thinkingBudget"
+  | "surgicalEdits"
+  | "askBeforeChanges"
+  | "completionGuard"
 
 export function switchFeature(
   server: ServerConnection.HttpBase,

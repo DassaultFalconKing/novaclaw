@@ -353,6 +353,7 @@ export function createPromptSubmit(input: PromptSubmitInput) {
           ...(features?.introspection !== undefined ? { introspection: features.introspection } : {}),
           ...(features?.quality !== undefined ? { quality: features.quality } : {}),
           ...(features?.affective !== undefined ? { affective: features.affective } : {}),
+          ...(features?.completionGuard !== undefined ? { completionGuard: features.completionGuard } : {}),
           // The composer's Mode choice becomes the session's kernel thread type at create time
           // (interactive is the server default — only an explicit unattended choice is sent).
           ...(mode !== undefined && mode !== "interactive" ? { type: mode } : {}),

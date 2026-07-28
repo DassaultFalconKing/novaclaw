@@ -181,6 +181,24 @@ describe("HttpApiCodegen.generate", () => {
     expect(effect).toContain('"x-example-token": input["x-example-token"]')
   })
 
+  test("passes an explicitly empty payload through imported Effect adapters", () => {
+    const contract = compileContract(
+      api(
+        HttpApiEndpoint.post("duplicate", "/session/:sessionID/duplicate", {
+          params: { sessionID: Schema.String },
+          payload: Schema.Struct({}),
+          success: Schema.String,
+        }),
+      ),
+    )
+    const effect = emitEffectImported(contract, {
+      module: "@example/api",
+      endpoints: { "session.duplicate": "Duplicate" },
+    }).files.find((file) => file.path === "client.ts")?.content
+
+    expect(effect).toContain('raw["duplicate"]({ params: { "sessionID": input["sessionID"] }, payload: {} })')
+  })
+
   test("rejects consumer group name collisions", () => {
     const source = HttpApi.make("test")
       .add(HttpApiGroup.make("first").add(HttpApiEndpoint.get("one", "/one", { success: Schema.String })))

@@ -13,7 +13,13 @@ export type Decision =
 
 export const initialState = (): State => ({ recoveries: 0 })
 
-export function decide(reason: FinishReason | undefined, needsContinuation: boolean, state: State): Decision {
+export function decide(
+  reason: FinishReason | undefined,
+  needsContinuation: boolean,
+  state: State,
+  enabled = true,
+): Decision {
+  if (!enabled) return { kind: "none" }
   if (reason !== "length" || needsContinuation) return { kind: "none" }
   if (state.recoveries === 0)
     return {
