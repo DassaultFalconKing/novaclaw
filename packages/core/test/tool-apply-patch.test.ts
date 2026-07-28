@@ -114,9 +114,10 @@ const withTool = <A, E, R>(directory: string, body: (registry: ToolRegistry.Inte
   )
 }
 
-const call = (patchText: string, id = "call-apply-patch") => ({
+const call = (patchText: string, id = "call-apply-patch", attachmentPaths?: ReadonlySet<string>) => ({
   sessionID,
   ...toolIdentity,
+  attachmentPaths,
   call: { type: "tool-call" as const, id, name: "apply_patch", input: { patchText } },
 })
 
@@ -222,6 +223,45 @@ describe("ApplyPatchTool", () => {
                 ).toEqual({ type: "error", value: "apply_patch moves are not supported yet" })
                 expect(yield* exists(path.join(tmp.path, "created.txt"))).toBe(false)
                 expect(assertions).toEqual([])
+              }),
+            ),
+          ),
+        )
+      },
+      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+    ),
+  )
+
+  it.live("passes canonical attachment targets through permission and preserves denied bytes", () =>
+    Effect.acquireUseRelease(
+      Effect.promise(() => tmpdir()),
+      (tmp) => {
+        reset()
+        denyAction = "edit"
+        const target = path.join(tmp.path, "attached.txt")
+        return Effect.promise(() => fs.writeFile(target, "before\n")).pipe(
+          Effect.andThen(
+            withTool(tmp.path, (registry) =>
+              Effect.gen(function* () {
+                expect(
+                  yield* executeTool(
+                    registry,
+                    call(
+                      "*** Begin Patch\n*** Update File: attached.txt\n@@\n-before\n+after\n*** End Patch",
+                      "call-attachment-patch",
+                      new Set([target]),
+                    ),
+                  ),
+                ).toMatchObject({ type: "error" })
+                expect(assertions).toMatchObject([
+                  {
+                    action: "edit",
+                    resources: ["attached.txt"],
+                    targetPaths: [target],
+                    attachmentPaths: [target],
+                  },
+                ])
+                expect(yield* Effect.promise(() => fs.readFile(target, "utf8"))).toBe("before\n")
               }),
             ),
           ),
