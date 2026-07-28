@@ -161,7 +161,7 @@ export const parseLinks = (raw: string, names: ReadonlyArray<string>, max = 20):
     const from = resolveName((item as { from?: unknown }).from, names)
     const to = resolveName((item as { to?: unknown }).to, names)
     if (from === undefined || to === undefined || from === to) continue
-    const key = `${from} ${to}`.toLowerCase()
+    const key = `${from}\x00${to}`.toLowerCase()
     if (seen.has(key)) continue
     seen.add(key)
     out.push({ from, to, type: linkType((item as { type?: unknown }).type) })
