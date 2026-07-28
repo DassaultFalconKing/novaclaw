@@ -49,6 +49,19 @@ describe("detect — the turns that actually shipped a silent no-op", () => {
     const found = TextualCall.detect(text, TOOLS)
     expect(found?.tell).toBe("repeated-block")
   })
+
+  test("observed live: promises a write call, then ends without making it", () => {
+    const text =
+      "I'll start by calling write on guard-source.md with payload MUTATED. " +
+      "After that denial, I will create and read the requested output."
+    const found = TextualCall.detect(text, TOOLS)
+    expect(found?.tell).toBe("promised-tool")
+    expect(found?.detail).toContain("I'll start by calling")
+  })
+
+  test("detects a Russian first-person tool commitment", () => {
+    expect(TextualCall.detect("Сейчас вызову write, затем проверю результат.", TOOLS)?.tell).toBe("promised-tool")
+  })
 })
 
 describe("detect — negatives (a false positive costs a wasted steer, so pin them)", () => {
@@ -57,6 +70,11 @@ describe("detect — negatives (a false positive costs a wasted steer, so pin th
       "I searched three sources and confirmed the figure. The brief is written to report.md. " +
       "Two sources were inaccessible (403) and are recorded as such."
     expect(TextualCall.detect(text, TOOLS)).toBeUndefined()
+  })
+
+  test("past-tense reports and user-facing instructions are not future action promises", () => {
+    expect(TextualCall.detect("I used write and read, and the verified result is SAFE.", TOOLS)).toBeUndefined()
+    expect(TextualCall.detect("You can use write to create this file.", TOOLS)).toBeUndefined()
   })
 
   test("a fence in a language that is NOT one of our tools is ordinary output", () => {
@@ -96,5 +114,15 @@ describe("recoveryMessage", () => {
     expect(message).toContain("do not invent a tool")
     // The escape hatch matters: a legitimate illustration must be able to end the turn honestly.
     expect(message).toContain("only an illustration")
+  })
+
+  test("an unfulfilled promise says that describing a call did not run it", () => {
+    const message = TextualCall.recoveryMessage({
+      tell: "promised-tool",
+      detail: `unfulfilled action promise "I'll call write"`,
+    })
+    expect(message).toContain("said you were about to perform one")
+    expect(message).toContain("promising")
+    expect(message).toContain("nothing happened")
   })
 })
