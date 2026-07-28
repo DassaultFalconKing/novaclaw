@@ -349,18 +349,6 @@ export const layer = Layer.effect(
     })
 
     const evaluateInput = EffectRuntime.fnUntraced(function* (input: AssertInput) {
-      const protectedResource = MUTATING_ACTIONS.has(input.action)
-        ? yield* sessions.context(input.sessionID).pipe(
-            EffectRuntime.map((messages) => protectedAttachmentResource(messages, input.action, input.resources)),
-            EffectRuntime.catch(() => EffectRuntime.succeed(undefined)),
-          )
-        : undefined
-      if (protectedResource)
-        return {
-          effect: "deny" as const,
-          rules: [{ action: input.action, resource: protectedResource, effect: "deny" as const }],
-          reason: "attachment-source" as DenialReason | undefined,
-        }
       // 1K: the session's resolved permission MODE contributes a rule overlay. Appended after the
       // agent's configured rules (last-match-wins) so the user's explicit mode outranks agent
       // defaults. The early hard-deny check runs over the configured chain and the mode overlay
