@@ -317,9 +317,12 @@ describe("finish re-grounding (2E/A7)", () => {
 })
 
 describe("isEmptyAssistantTurn", () => {
-  test("no text and no tool call is empty (reasoning does not count)", () => {
-    expect(isEmptyAssistantTurn([userMsg("go"), assistantMsg([reasoningPart("thinking about tools…")])])).toBe(true)
+  test("no output and no tool call is empty", () => {
     expect(isEmptyAssistantTurn([userMsg("go"), assistantMsg([])])).toBe(true)
+  })
+
+  test("reasoning-only output is not assumed to be a dropped tool call", () => {
+    expect(isEmptyAssistantTurn([userMsg("go"), assistantMsg([reasoningPart("thinking about tools…")])])).toBe(false)
   })
 
   test("whitespace-only text is still empty", () => {

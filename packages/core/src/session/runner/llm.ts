@@ -1055,6 +1055,8 @@ export const layer = Layer.effect(
             needsContinuation: !publisher.hasProviderError() && needsContinuation,
             step: currentStep,
             finishReason,
+            assistantMessageID: publisher.currentAssistantMessageID(),
+            providerError: publisher.hasProviderError(),
           }
         }),
       )
@@ -1064,7 +1066,13 @@ export const layer = Layer.effect(
       promotion: SessionInput.Delivery | undefined,
       step: number,
     ) => Effect.Effect<
-      { readonly needsContinuation: boolean; readonly step: number; readonly finishReason?: FinishReason },
+      {
+        readonly needsContinuation: boolean
+        readonly step: number
+        readonly finishReason?: FinishReason
+        readonly assistantMessageID?: SessionMessage.ID
+        readonly providerError: boolean
+      },
       RunError
     >
 
@@ -1675,7 +1683,16 @@ export const layer = Layer.effect(
             }
           }
           const context = yield* getContext(input.sessionID)
-          const finishDecision = FinishRecovery.decide(result.finishReason, result.needsContinuation, finishRecovery)
+          const cleanTerminal = result.assistantMessageID !== undefined && !result.providerError
+          const hasPendingUserInput =
+            !result.needsContinuation &&
+            ((yield* SessionInput.hasPending(db, input.sessionID, "steer")) ||
+              (yield* SessionInput.hasPending(db, input.sessionID, "queue")))
+          const finishDecision = FinishRecovery.decide(
+            cleanTerminal ? result.finishReason : undefined,
+            result.needsContinuation || hasPendingUserInput,
+            finishRecovery,
+          )
           // 1E doom-loop break: only while the model is still acting (made a tool call).
           // If its last few tool calls are byte-identical, inject a one-shot redirect as a
           // steer so the next turn is nudged to change approach.
@@ -1755,11 +1772,18 @@ export const layer = Layer.effect(
                 yield* runQualityCheck(input.sessionID, check).pipe(
                   Effect.catchCause((cause) => Effect.logWarning("quality check errored", { cause })),
                 )
-          } else if (isEmptyAssistantTurn(context)) {
+          } else if (
+            result.finishReason === "stop" &&
+            cleanTerminal &&
+            !hasPendingUserInput &&
+            isEmptyAssistantTurn(context, result.assistantMessageID)
+          ) {
             // 1N/A3: the turn produced no text AND no tool call — typically a tool call streamed
             // into the reasoning channel and dropped by the server's parser. Inject ONE synthetic
             // re-prompt (re-armed on progress above); a SECOND consecutive empty means the re-prompt
             // isn't working, so stop and surface the server-side fix instead of looping silently.
+            // Require an explicit clean provider stop: an absent terminal event or a provider error
+            // is not evidence that the model attempted a call and must not manufacture a new turn.
             consecutiveEmpty++
             if (consecutiveEmpty === 1) {
               yield* Effect.logInfo("empty-turn recovery", { sessionID: input.sessionID })
@@ -1779,7 +1803,7 @@ export const layer = Layer.effect(
                   })
                 }).pipe(Effect.ignore)
             }
-          } else {
+          } else if (result.finishReason === "stop" && cleanTerminal) {
             consecutiveEmpty = 0
             // 2E/A7: finish re-grounding — a substantial turn ending with a clean, confident
             // summary gets ONE "walk your acceptance criteria" re-prompt. Suppressed when the

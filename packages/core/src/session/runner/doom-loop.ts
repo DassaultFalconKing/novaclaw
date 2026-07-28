@@ -247,20 +247,26 @@ export const toolCallsSinceLastUser = (context: readonly SessionMessage.Message[
   return refs
 }
 
-// 1N/A3 — a turn is "empty" when its assistant message has no non-empty text AND no tool call
-// (reasoning does not count — a leaked-into-reasoning tool call the server dropped is exactly this
-// case). A turn that recorded an `error` is NOT empty: that is 1D's retry territory, not a stall.
-export const isEmptyAssistantTurn = (context: readonly SessionMessage.Message[]): boolean => {
+// 1N/A3 — a turn is "empty" when its assistant message has no non-empty output AND no tool call.
+// Reasoning is output too: treating a deliberate reasoning-only turn as evidence of a dropped tool
+// call manufactures a second provider turn without enough evidence. A turn that recorded an `error`
+// is NOT empty either: that is 1D's retry territory, not a stall.
+export const isEmptyAssistantTurn = (
+  context: readonly SessionMessage.Message[],
+  assistantMessageID?: SessionMessage.ID,
+): boolean => {
   let lastAssistant: SessionMessage.Assistant | undefined
   for (let i = context.length - 1; i >= 0; i--) {
     const message = context[i]!
-    if (message.type === "assistant") {
+    if (message.type === "assistant" && (assistantMessageID === undefined || message.id === assistantMessageID)) {
       lastAssistant = message
       break
     }
   }
   if (!lastAssistant || lastAssistant.error !== undefined) return false
-  const hasText = lastAssistant.content.some((part) => part.type === "text" && part.text.trim() !== "")
+  const hasOutput = lastAssistant.content.some(
+    (part) => (part.type === "text" || part.type === "reasoning") && part.text.trim() !== "",
+  )
   const hasTool = lastAssistant.content.some((part) => part.type === "tool")
-  return !hasText && !hasTool
+  return !hasOutput && !hasTool
 }
