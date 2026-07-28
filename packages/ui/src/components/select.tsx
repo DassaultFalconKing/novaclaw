@@ -91,10 +91,10 @@ export function Select<T>(props: SelectProps<T> & Omit<ButtonProps, "children">)
       placement={local.triggerVariant === "settings" ? "bottom-end" : "bottom-start"}
       gutter={4}
       value={local.current}
-      options={grouped()}
+      options={local.groupBy ? grouped() : local.options}
       optionValue={(x) => (local.value ? local.value(x) : (x as string))}
       optionTextValue={(x) => (local.label ? local.label(x) : (x as string))}
-      optionGroupChildren="options"
+      optionGroupChildren={local.groupBy ? "options" : undefined}
       placeholder={local.placeholder}
       sectionComponent={(local) => (
         <Kobalte.Section data-slot="select-section">{local.section.rawValue.category}</Kobalte.Section>
