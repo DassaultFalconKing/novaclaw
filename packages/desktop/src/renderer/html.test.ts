@@ -60,3 +60,11 @@ describe("electron vite publicDir", () => {
     expect(existsSync(join(resolved, "oc-theme-preload.js"))).toBe(true)
   })
 })
+
+describe("electron renderer production output", () => {
+  test("keeps frontend chunk optimization enabled", async () => {
+    const config = await Bun.file(join(root, "electron.vite.config.ts")).text()
+    expect(config).toContain('minify: "esbuild"')
+    expect(config).toContain("plugins: [appPlugin]")
+  })
+})

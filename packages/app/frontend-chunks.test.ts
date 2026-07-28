@@ -8,6 +8,9 @@ describe("frontend chunks", () => {
   })
 
   test("groups application and workspace modules", () => {
+    expect(frontendChunk("/repo/packages/app/src/i18n/en.ts")).toBe("novaclaw-locales-app")
+    expect(frontendChunk("/repo/packages/ui/src/i18n/de.ts")).toBe("novaclaw-locales-shell")
+    expect(frontendChunk("/repo/packages/desktop/src/renderer/i18n/uk.ts")).toBe("novaclaw-locales-shell")
     expect(frontendChunk("/repo/packages/app/src/components/settings-v2/models.tsx")).toBe("novaclaw-settings")
     expect(frontendChunk("/repo/packages/app/src/pages/session.tsx")).toBeUndefined()
     expect(frontendChunk("/repo/packages/session-ui/src/components/file.tsx")).toBeUndefined()

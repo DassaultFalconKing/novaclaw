@@ -79,6 +79,7 @@ export default defineConfig({
     publicDir: "../../../app/public",
     root: "src/renderer",
     build: {
+      minify: "esbuild",
       sourcemap: true,
       rollupOptions: {
         input: {

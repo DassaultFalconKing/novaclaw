@@ -6,6 +6,9 @@ export const frontendChunkBudget = {
 export function frontendChunk(id) {
   const source = id.replaceAll("\\", "/")
 
+  if (source.includes("/packages/app/src/i18n/")) return "novaclaw-locales-app"
+  if (source.includes("/packages/ui/src/i18n/") || source.includes("/packages/desktop/src/renderer/i18n/"))
+    return "novaclaw-locales-shell"
   if (source.includes("/packages/app/src/components/settings-v2/")) return "novaclaw-settings"
   if (source.includes("/packages/ui/")) return "novaclaw-ui"
   if (
