@@ -31,7 +31,7 @@ describe("SessionDrive.decide", () => {
     expect(decision.kind).toBe("cap")
     if (decision.kind === "cap") {
       expect(decision.notice).toContain(`${SessionDrive.MAX_DRIVE_ROUNDS} self-prompted rounds`)
-      expect(decision.notice).toContain("sending any message continues")
+      expect(decision.notice).toContain("send `resume`")
     }
   })
 

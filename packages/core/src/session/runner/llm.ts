@@ -7,6 +7,7 @@ import {
   SystemPart,
   isContextOverflowFailure,
   type LLMRequest,
+  type FinishReason,
   type ProviderErrorEvent,
 } from "@novaclaw/llm"
 import { Cause, DateTime, Duration, Effect, Fiber, FiberSet, Layer, Option, Semaphore, Stream } from "effect"
@@ -43,7 +44,12 @@ import { SessionSchema } from "../schema"
 import { SessionStore } from "../store"
 import { SessionTitle } from "../title"
 
-import { resolveSessionConfig, rootSessionType, EFFECTIVE_CONFIG_DEFAULTS, type EffectiveConfig } from "../config-resolve"
+import {
+  resolveSessionConfig,
+  rootSessionType,
+  EFFECTIVE_CONFIG_DEFAULTS,
+  type EffectiveConfig,
+} from "../config-resolve"
 import { AgentJail } from "../../agent-jail"
 import { SessionScheduler } from "../scheduler"
 import { type RunError, Service } from "./index"
@@ -86,6 +92,7 @@ import { Introspection } from "./introspection"
 import { MAX_STEPS_PROMPT } from "./max-steps"
 import { ReasoningBudget } from "./reasoning-budget"
 import { ProviderRetry } from "./provider-retry"
+import { FinishRecovery } from "./finish-recovery"
 import { Quality } from "./quality"
 import { QualityProvision } from "./quality-provision"
 import { Snapshot } from "../../snapshot"
@@ -164,8 +171,7 @@ export const shouldCheckForSteer = (input: {
   readonly alreadyCut: boolean
   readonly now: number
   readonly lastCheck: number
-}): boolean =>
-  !input.sawToolCall && !input.alreadyCut && input.now - input.lastCheck >= STEER_POLL_MS
+}): boolean => !input.sawToolCall && !input.alreadyCut && input.now - input.lastCheck >= STEER_POLL_MS
 
 export const layer = Layer.effect(
   Service,
@@ -234,7 +240,9 @@ export const layer = Layer.effect(
       const failed = !result.ok
         ? {
             output: String(result.error.stderr ?? result.error.message ?? ""),
-            timedOut: /Timed out/i.test(String((result.error.cause as { message?: string } | undefined)?.message ?? "")),
+            timedOut: /Timed out/i.test(
+              String((result.error.cause as { message?: string } | undefined)?.message ?? ""),
+            ),
           }
         : result.run.exitCode !== 0
           ? { output: result.run.output?.toString("utf8") ?? "", exit: result.run.exitCode }
@@ -467,7 +475,8 @@ export const layer = Layer.effect(
       // Embed the extracted facts so they're reachable by the VECTOR leg later (measured: hybrid
       // retrieval 85% vs 77% keyword-only). ONE batched call for the whole extraction, and this runs
       // in postRunMaintenance — off the turn hot-path. No device ⇒ undefined ⇒ FTS-only memories.
-      const vectors = facts.length === 0 ? undefined : yield* Effect.promise(() => KbEmbedder.embed(facts.map((f) => f.text)))
+      const vectors =
+        facts.length === 0 ? undefined : yield* Effect.promise(() => KbEmbedder.embed(facts.map((f) => f.text)))
       for (const [index, fact] of facts.entries()) {
         const vector = vectors?.[index]
         yield* memory
@@ -516,14 +525,13 @@ export const layer = Layer.effect(
       // sentence).
       if (links.length > 0) {
         const idByName = new Map<string, string>()
-        for (const fact of namedFacts) if (!idByName.has(fact.name)) idByName.set(fact.name, SessionExtract.memoryID(scope, fact.text))
+        for (const fact of namedFacts)
+          if (!idByName.has(fact.name)) idByName.set(fact.name, SessionExtract.memoryID(scope, fact.text))
         for (const link of links) {
           const from = idByName.get(link.from)
           const to = idByName.get(link.to)
           if (from === undefined || to === undefined) continue
-          yield* memory
-            .addEdge({ from, to, type: link.type, scope, source: "auto-extract" })
-            .pipe(Effect.ignore) // duplicate edge = already linked; never fail the drain
+          yield* memory.addEdge({ from, to, type: link.type, scope, source: "auto-extract" }).pipe(Effect.ignore) // duplicate edge = already linked; never fail the drain
         }
       }
     })
@@ -546,7 +554,11 @@ export const layer = Layer.effect(
       yield* SessionPatch.patchSessionRecord({ db, events }, sessionID, (info) =>
         SessionChanges.equal(info.summary, summary)
           ? undefined
-          : SessionSchema.Info.make({ ...info, summary, time: { ...info.time, updated: DateTime.makeUnsafe(Date.now()) } }),
+          : SessionSchema.Info.make({
+              ...info,
+              summary,
+              time: { ...info.time, updated: DateTime.makeUnsafe(Date.now()) },
+            }),
       )
     })
 
@@ -752,7 +764,15 @@ export const layer = Layer.effect(
       const fullRequest = LLM.request({
         model,
         providerOptions: { openai: { promptCacheKey } },
-        system: [personaBaseline, expertiseHint, tierHint, memoryRecall, config.systemPromptOverride, agent.info?.system, system.baseline]
+        system: [
+          personaBaseline,
+          expertiseHint,
+          tierHint,
+          memoryRecall,
+          config.systemPromptOverride,
+          agent.info?.system,
+          system.baseline,
+        ]
           .filter((part): part is string => part !== undefined && part.length > 0)
           .map(SystemPart.make),
         messages: [...toLLMMessages(context, model), ...(isLastStep ? [Message.assistant(MAX_STEPS_PROMPT)] : [])],
@@ -795,6 +815,7 @@ export const layer = Layer.effect(
       const publish = (event: LLMEvent, outputPaths: ReadonlyArray<string> = []) =>
         withPublication(publisher.publish(event, outputPaths))
       let overflowFailure: ProviderErrorEvent | undefined
+      let finishReason: FinishReason | undefined
       // 1D: an attempt that produced ANY event is never retried (a retry would duplicate
       // partially-streamed output) — only pure pre-stream failures (connection refused,
       // an HTTP error before the first SSE event) are transparently retried below.
@@ -835,7 +856,15 @@ export const layer = Layer.effect(
           Effect.gen(function* () {
             sawProviderEvent = true
             if (event.type === "tool-call") sawToolCall = true
-            if (shouldCheckForSteer({ sawToolCall, alreadyCut: steerInterrupt, now: Date.now(), lastCheck: lastSteerCheck })) {
+            if (event.type === "finish") finishReason = event.reason
+            if (
+              shouldCheckForSteer({
+                sawToolCall,
+                alreadyCut: steerInterrupt,
+                now: Date.now(),
+                lastCheck: lastSteerCheck,
+              })
+            ) {
               lastSteerCheck = Date.now()
               steerInterrupt = yield* SessionInput.hasPending(db, session.id, "steer").pipe(
                 Effect.orElseSucceed(() => false),
@@ -922,9 +951,7 @@ export const layer = Layer.effect(
               attempt,
               error: ProviderRetry.retryErrorPayload(transient),
             })
-            yield* restore(
-              Effect.sleep(Duration.millis(ProviderRetry.retryDelayMs(attempt, transient.retryAfterMs))),
-            )
+            yield* restore(Effect.sleep(Duration.millis(ProviderRetry.retryDelayMs(attempt, transient.retryAfterMs))))
             attempt++
             sawProviderEvent = false
             stream = yield* restore(providerStream).pipe(Effect.exit)
@@ -1021,7 +1048,11 @@ export const layer = Layer.effect(
           if (stream._tag === "Failure") return yield* Effect.failCause(stream.cause)
           if (settled._tag === "Failure" && Cause.hasInterrupts(settled.cause))
             return yield* Effect.failCause(settled.cause)
-          return { needsContinuation: !publisher.hasProviderError() && needsContinuation, step: currentStep }
+          return {
+            needsContinuation: !publisher.hasProviderError() && needsContinuation,
+            step: currentStep,
+            finishReason,
+          }
         }),
       )
     }, Effect.scoped)
@@ -1029,7 +1060,10 @@ export const layer = Layer.effect(
       sessionID: SessionSchema.ID,
       promotion: SessionInput.Delivery | undefined,
       step: number,
-    ) => Effect.Effect<{ readonly needsContinuation: boolean; readonly step: number }, RunError>
+    ) => Effect.Effect<
+      { readonly needsContinuation: boolean; readonly step: number; readonly finishReason?: FinishReason },
+      RunError
+    >
 
     const runAfterOverflowCompaction: RunTurn = Effect.fnUntraced(function* (sessionID, promotion, step) {
       return yield* runTurnAttempt(sessionID, promotion, step).pipe(
@@ -1065,9 +1099,7 @@ export const layer = Layer.effect(
     // lives in the runner because only the runner holds the shared LLMClient (the OFF-C offline
     // chokepoint) and the model resolution. Failures surface as a calm Synthetic notice (the
     // "never breaks" rule: an invisible no-op compact is a broken button) and never fail the drain.
-    const runManualCompaction = Effect.fn("SessionRunner.manualCompaction")(function* (
-      sessionID: SessionSchema.ID,
-    ) {
+    const runManualCompaction = Effect.fn("SessionRunner.manualCompaction")(function* (sessionID: SessionSchema.ID) {
       const session = yield* getSession(sessionID)
       if (session.location.directory !== location.directory || session.location.workspaceID !== location.workspaceID)
         return
@@ -1138,7 +1170,9 @@ export const layer = Layer.effect(
           })
         }).pipe(Effect.ignore)
       const session = yield* getSession(sessionID)
-      const model = yield* models.resolve({ ...session, model: resolved.model as typeof session.model }).pipe(
+      const model = yield* models
+        .resolve({ ...session, model: resolved.model as typeof session.model })
+        .pipe(
         Effect.catch((error: unknown) =>
           notice(
             `⚠️ Strict mode couldn't run — the session's model is unavailable (${error instanceof Error ? error.message : String(error)}).`,
@@ -1233,7 +1267,13 @@ export const layer = Layer.effect(
             yield* notice(
               `⏸️ A previous Strict run was interrupted before finishing — “${shortGoal}”. Your files kept every verified step; say "resume" to continue it.`,
             )
-            yield* JhStore.save(db, { id: savedKey, goal: saved.goal, status: "interrupted", state: saved.state, now: Date.now() })
+            yield* JhStore.save(db, {
+              id: savedKey,
+              goal: saved.goal,
+              status: "interrupted",
+              state: saved.state,
+              now: Date.now(),
+            })
           }
           if (verdict === "chat") return "chat" as const
         }
@@ -1254,7 +1294,10 @@ export const layer = Layer.effect(
             const fork = SessionStrict.forkWorkspace(location.directory, i + 1)
             if ("refused" in fork) {
               yield* notice(`🛡️ Racing is OFF for this task — ${fork.refused}. Running a single attempt instead.`)
-              for (const d of forks) try { fs.rmSync(d, { recursive: true, force: true }) } catch {}
+              for (const d of forks)
+                try {
+                  fs.rmSync(d, { recursive: true, force: true })
+                } catch {}
               forks = []
               attempts = 1
               break
@@ -1323,9 +1366,7 @@ export const layer = Layer.effect(
               name: action.tool,
               result: action.ok ? { type: "text", value: action.output } : { type: "error", value: action.output },
             })
-          }).pipe(
-            Effect.catchCause((cause) => Effect.logWarning("strict action part failed", { sessionID, cause })),
-          )
+          }).pipe(Effect.catchCause((cause) => Effect.logWarning("strict action part failed", { sessionID, cause })))
         const runOne = (i: number, cwd: string) =>
           SessionStrict.runTask({
             task: goal,
@@ -1417,32 +1458,57 @@ export const layer = Layer.effect(
         const finalize = Effect.gen(function* () {
           const reports = single
             ? [yield* runOne(0, location.directory)]
-            : yield* Effect.all(forks.map((dir, i) => runOne(i, dir)), { concurrency: "unbounded" })
-          const report = winnerIdx !== undefined ? reports[winnerIdx] : (reports.find((r) => r !== undefined) ?? undefined)
+            : yield* Effect.all(
+                forks.map((dir, i) => runOne(i, dir)),
+                { concurrency: "unbounded" },
+              )
+          const report =
+            winnerIdx !== undefined ? reports[winnerIdx] : (reports.find((r) => r !== undefined) ?? undefined)
           if (report === undefined) {
-            yield* notice("⚠️ The Strict run hit an internal error — see the server log. The working directory is left as-is.")
-            for (const d of forks) try { fs.rmSync(d, { recursive: true, force: true }) } catch {}
+            yield* notice(
+              "⚠️ The Strict run hit an internal error — see the server log. The working directory is left as-is.",
+            )
+            for (const d of forks)
+              try {
+                fs.rmSync(d, { recursive: true, force: true })
+              } catch {}
             return
           }
           let appliedFiles: string[] = []
           if (!single) {
             if (winnerIdx !== undefined && baseline) {
               appliedFiles = SessionStrict.applyBack(forks[winnerIdx]!, location.directory, baseline)
-              yield* notice(`🏁 Attempt ${winnerIdx + 1}/${attempts} WON the race — ${appliedFiles.length} changed file${appliedFiles.length === 1 ? "" : "s"} applied to the folder: ${appliedFiles.slice(0, 8).join(", ")}${appliedFiles.length > 8 ? ", …" : ""}`)
-              for (const d of forks) try { fs.rmSync(d, { recursive: true, force: true }) } catch {}
+              yield* notice(
+                `🏁 Attempt ${winnerIdx + 1}/${attempts} WON the race — ${appliedFiles.length} changed file${appliedFiles.length === 1 ? "" : "s"} applied to the folder: ${appliedFiles.slice(0, 8).join(", ")}${appliedFiles.length > 8 ? ", …" : ""}`,
+              )
+              for (const d of forks)
+                try {
+                  fs.rmSync(d, { recursive: true, force: true })
+                } catch {}
             } else if (stopRequested) {
               yield* notice(`🏁 The race was stopped before any attempt verified success — YOUR FOLDER IS UNCHANGED.`)
-              for (const d of forks) try { fs.rmSync(d, { recursive: true, force: true }) } catch {}
+              for (const d of forks)
+                try {
+                  fs.rmSync(d, { recursive: true, force: true })
+                } catch {}
             } else {
-              yield* notice(`🏁 No attempt verified success — YOUR FOLDER IS UNCHANGED. The attempt workspaces are kept for inspection: ${forks.join(" · ")}`)
+              yield* notice(
+                `🏁 No attempt verified success — YOUR FOLDER IS UNCHANGED. The attempt workspaces are kept for inspection: ${forks.join(" · ")}`,
+              )
             }
           }
-          yield* JhStore.save(db, { id: savedKey, goal, status: report.status, state: report.state, now: Date.now() }).pipe(Effect.ignore)
+          yield* JhStore.save(db, {
+            id: savedKey,
+            goal,
+            status: report.status,
+            state: report.state,
+            now: Date.now(),
+          }).pipe(Effect.ignore)
           const steps = report.state.tree.nodes.size
           const stopped = report.reason === "aborted"
           yield* notice(
             report.status === "done"
-              ? `✅ Strict task complete — ${steps} steps, every one verified.`
+              ? `✅ Strict task complete — ${steps} steps checked; whole-task completion was judged from workspace evidence (no task-specific mechanical oracle).`
               : stopped
                 ? `⏹️ Strict run stopped at your request after ${steps} steps — the best verified state was kept${single ? " in the working directory" : ""}. Say "resume" to pick it up again.`
                 : `⚠️ Strict run stopped (${report.reason ?? "blocked"}) after ${steps} steps — the best verified state was kept${single ? " in the working directory" : " in the attempt workspaces"}. Say "resume" to continue it.`,
@@ -1454,9 +1520,7 @@ export const layer = Layer.effect(
             for (const action of racerActions[winnerIdx]!) yield* publishAction(action)
           yield* publishSummary(report, appliedFiles)
           yield* postRunMaintenance(sessionID)
-        }).pipe(
-          Effect.catchCause((cause) => Effect.logError("strict finalize failed", { sessionID, cause })),
-        )
+        }).pipe(Effect.catchCause((cause) => Effect.logError("strict finalize failed", { sessionID, cause })))
         const worker = yield* Effect.forkDetach(finalize)
         strictInflight.set(sessionID, worker)
         yield* Fiber.join(worker).pipe(
@@ -1561,6 +1625,7 @@ export const layer = Layer.effect(
       // Self-drive state (architecture.md "run until exit()"): per-DRAIN round/wall counters —
       // a fresh drain (any new message) re-arms a cap-paused autonomous session.
       const driveState = SessionDrive.initialState(DateTime.toEpochMillis(yield* DateTime.now))
+      const finishRecovery = FinishRecovery.initialState()
       // T1 per-session feature stances (the composer's Tuning toggles), resolved through the
       // config walk above: an explicit true/false on the chain wins; no stance = global config.
       // Only the ON/OFF is per-session — cadence/commands/model internals stay global.
@@ -1568,11 +1633,7 @@ export const layer = Layer.effect(
       const introspectionOn = handoff.introspection ?? introspectionConfig.enabled
       // QE-A: quality mode with NO provisioned commands is inert — steer ONCE per session
       // to run the provisioner (deterministic manifest scan → verify → write project config).
-      if (
-        qualityOn &&
-        !Object.values(qualityConfig.commands).some(Boolean) &&
-        !provisionNudged.has(input.sessionID)
-      ) {
+      if (qualityOn && !Object.values(qualityConfig.commands).some(Boolean) && !provisionNudged.has(input.sessionID)) {
         provisionNudged.add(input.sessionID)
         if (provisionNudged.size > 500) provisionNudged.clear()
         yield* SessionInput.steer(db, events, input.sessionID, QualityProvision.NUDGE)
@@ -1585,6 +1646,7 @@ export const layer = Layer.effect(
       const alreadyExited =
         (yield* store.get(input.sessionID).pipe(Effect.orElseSucceed(() => undefined)))?.result !== undefined
       let exitedMidDrain = false
+      let finishRecoveryStopped = false
       while (shouldRun) {
         let needsContinuation = true
         let step = 1
@@ -1610,10 +1672,31 @@ export const layer = Layer.effect(
             }
           }
           const context = yield* getContext(input.sessionID)
+          if (result.finishReason !== "length") finishRecovery.recoveries = 0
+          const finishDecision = FinishRecovery.decide(result.finishReason, result.needsContinuation, finishRecovery)
           // 1E doom-loop break: only while the model is still acting (made a tool call).
           // If its last few tool calls are byte-identical, inject a one-shot redirect as a
           // steer so the next turn is nudged to change approach.
-          if (result.needsContinuation) {
+          if (finishDecision.kind === "continue") {
+            finishRecovery.recoveries++
+            yield* Effect.logInfo("provider length recovery", {
+              sessionID: input.sessionID,
+              recovery: finishRecovery.recoveries,
+            })
+            yield* SessionInput.steer(db, events, input.sessionID, finishDecision.message)
+          } else if (finishDecision.kind === "stop") {
+            yield* Effect.logWarning("provider length recovery exhausted", { sessionID: input.sessionID })
+            yield* events
+              .publish(SessionEvent.Synthetic, {
+                sessionID: input.sessionID,
+                messageID: SessionMessage.ID.create(),
+                timestamp: yield* DateTime.now,
+                text: finishDecision.notice,
+              })
+              .pipe(Effect.ignore)
+            finishRecoveryStopped = true
+            break
+          } else if (result.needsContinuation) {
             consecutiveEmpty = 0 // 1N/A3: a tool call is genuine progress — re-arm empty-turn recovery.
             const calls = context.flatMap((message) =>
               message.type === "assistant"
@@ -1743,7 +1826,7 @@ export const layer = Layer.effect(
           }
           if (!needsContinuation) needsContinuation = yield* SessionInput.hasPending(db, input.sessionID, "steer")
         }
-        if (exitedMidDrain) break
+        if (exitedMidDrain || finishRecoveryStopped) break
         shouldRun = yield* SessionInput.hasPending(db, input.sessionID, "queue")
         promotion = shouldRun ? "queue" : undefined
         if (!shouldRun) {
@@ -1755,11 +1838,7 @@ export const layer = Layer.effect(
           // spawned children and forks don't silently self-drive; Stop interrupts this very
           // fiber, so it remains the unconditional kill switch. See runner/drive.ts.
           const latest = yield* store.get(input.sessionID).pipe(Effect.orElseSucceed(() => undefined))
-          const decision = SessionDrive.decide(
-            latest,
-            driveState,
-            DateTime.toEpochMillis(yield* DateTime.now),
-          )
+          const decision = SessionDrive.decide(latest, driveState, DateTime.toEpochMillis(yield* DateTime.now))
           if (decision.kind === "continue") {
             driveState.rounds++
             yield* Effect.logInfo("self-drive continuation", {

@@ -57,12 +57,12 @@ Projected hosted tools preserve call-side and settlement-side provider metadata 
 
 This reduces horizon failures but is not a completion guarantee:
 
-| Residual stop | Maintainer mitigation |
-| --- | --- |
-| Model calls `exit()` too early | Prefer Strict. For normal self-drive, add a two-phase exit gate: validate explicit acceptance criteria and steer on failure before persisting `result`. |
-| No mechanical completion check | Supply a task-specific `taskComplete` oracle. Otherwise use `verifyGoal` plus evidence and report subjective results as unverified, not mechanically complete. |
-| Round or wall-clock cap expires | Preserve checkpoints, expose the cap notice, and resume explicitly. Set `strict.wallMinutes` from the task budget; do not silently disable the watchdog. |
-| Context overflow or truncated generation | Keep steps atomic, compact before pressure, and use separate, adequately sized reasoning/execution budgets. Retain empty-turn recovery, but surface repeated truncation as a provider/configuration fault. |
+| Residual stop                            | Maintainer mitigation                                                                                                                                                                                           |
+| ---------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Model calls `exit()` too early           | Normal self-drive uses a two-phase exit gate: the first call requests confirmation; a later call must provide acceptance evidence before `result` is persisted. Prefer Strict for mechanically checked work.    |
+| No mechanical completion check           | Supply a task-specific `taskComplete` oracle. Otherwise Strict uses `verifyGoal` plus evidence and reports whole-task completion as evidence-judged, never mechanically proven.                                 |
+| Round or wall-clock cap expires          | Durable history/Strict checkpoints remain resumable and the cap notice names `resume`. Set `strict.wallMinutes` from the task budget; do not silently disable the watchdog.                                     |
+| Context overflow or truncated generation | Keep steps atomic, compact before pressure, and use separate reasoning/execution budgets. One terminal `finish_reason=length` is continued; a repeat pauses with an explicit provider/configuration diagnostic. |
 
 ## Context Epochs
 

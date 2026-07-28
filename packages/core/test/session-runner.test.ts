@@ -611,6 +611,35 @@ const verifyPartialFlushOnInterruption = (kind: FragmentKind) =>
   })
 
 describe("SessionRunnerLLM", () => {
+  it.effect("continues one terminal length finish, then pauses with an explicit diagnostic", () =>
+    Effect.gen(function* () {
+      yield* setup
+      const session = yield* SessionV2.Service
+      const before = requests.length
+      yield* session.prompt({ sessionID, prompt: Prompt.make({ text: "Produce a long result" }), resume: false })
+      responses = ["first", "second"].map((id) => [
+        LLMEvent.stepStart({ index: 0 }),
+        LLMEvent.textStart({ id }),
+        LLMEvent.textDelta({ id, text: `${id} partial` }),
+        LLMEvent.textEnd({ id }),
+        LLMEvent.stepFinish({ index: 0, reason: "length" }),
+        LLMEvent.finish({ reason: "length" }),
+      ])
+
+      yield* session.resume(sessionID)
+
+      expect(requests.length - before).toBe(2)
+      expect(userTexts(requests[before + 1])).toContainEqual(expect.stringContaining("output-token limit"))
+      expect(yield* session.context(sessionID)).toContainEqual(
+        expect.objectContaining({
+          type: "synthetic",
+          text: expect.stringContaining("increase the execution/output budget"),
+        }),
+      )
+      requests.length = before
+    }),
+  )
+
   it.effect("advertises and executes a globally attached application tool", () =>
     Effect.gen(function* () {
       yield* setup
