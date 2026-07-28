@@ -38,19 +38,50 @@ export interface Settlement {
   readonly outputPaths?: ReadonlyArray<string>
 }
 
-export const UNKNOWN_TOOL_LIST_LIMIT = 12
+export const UNKNOWN_TOOL_LIST_CHARS = 240
 
 export const unknownToolMessage = (name: string, available: Iterable<string>): string => {
-  const names = Array.from(available).sort()
+  const names = Array.from(available)
   if (names.length === 0)
     return `Unknown tool: ${name}. No tools are available in this turn. Do not invent a tool or write a call as text.`
-  const shown = names.slice(0, UNKNOWN_TOOL_LIST_LIMIT)
-  const label =
-    names.length > shown.length ? `Available tools (first ${shown.length} of ${names.length})` : "Available tools"
+  const shown = names.reduce<string[]>(
+    (result, candidate) =>
+      result.length === 0 || [...result, candidate].join(", ").length <= UNKNOWN_TOOL_LIST_CHARS
+        ? [...result, candidate]
+        : result,
+    [],
+  )
+  const label = names.length > shown.length ? `Available tools (${shown.length} of ${names.length})` : "Available tools"
+  const near = uniqueNearMatch(name, names)
   return (
-    `Unknown tool: ${name}. ${label}: ${shown.join(", ")}. ` +
+    `Unknown tool: ${name}.${near ? ` Did you mean \`${near}\`?` : ""} ${label}: ${shown.join(", ")}. ` +
     `Use one of these exact advertised names; do not invent a tool or write a call as text.`
   )
+}
+
+const uniqueNearMatch = (name: string, names: readonly string[]): string | undefined => {
+  const lower = name.toLowerCase()
+  const scored = names.map((candidate) => ({
+    candidate,
+    score: 1 - editDistance(lower, candidate.toLowerCase()) / Math.max(lower.length, candidate.length),
+  }))
+  const best = Math.max(...scored.map((item) => item.score))
+  if (best < 0.85 || scored.filter((item) => item.score === best).length !== 1) return undefined
+  return scored.find((item) => item.score === best)?.candidate
+}
+
+const editDistance = (left: string, right: string): number => {
+  const row = Array.from({ length: right.length + 1 }, (_, index) => index)
+  for (let i = 1; i <= left.length; i++) {
+    let previous = row[0]!
+    row[0] = i
+    for (let j = 1; j <= right.length; j++) {
+      const current = row[j]!
+      row[j] = Math.min(row[j]! + 1, row[j - 1]! + 1, previous + (left[i - 1] === right[j - 1] ? 0 : 1))
+      previous = current
+    }
+  }
+  return row[right.length]!
 }
 
 export class Service extends Context.Service<Service, Interface>()("@novaclaw/v2/ToolRegistry") {}
