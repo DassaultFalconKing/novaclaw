@@ -86,6 +86,7 @@ async function check() {
     if ((await Bun.file(registry).text()) !== (await formatTypescript(renderRegistry(migrations)))) {
       throw new Error("Database migration registry is stale. Run `bun script/migration.ts` from packages/core.")
     }
+    console.log("No schema changes, nothing to migrate")
   } finally {
     await fs.rm(temporary, { recursive: true, force: true })
   }
