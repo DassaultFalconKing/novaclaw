@@ -79,6 +79,19 @@ choice and context pressure. Inspect the raw response before changing the chat t
 `tool_calls` indicate a model-policy miss; literal `<tool_call>` in `message.content` indicates a
 template/parser mismatch.
 
+### Attachment trust boundary
+
+Every attached file gets a model-facing trust boundary immediately before its content part. The
+runner treats file content as untrusted data, not as system, operator, tool, or permission
+instructions. The model may follow task instructions inside a file only when the surrounding user
+request explicitly delegates them and they remain inside the trusted operator's existing authority
+and scope. A file cannot override policy, expand permissions, request secrets, or redefine the
+available tools.
+
+The trust boundary applies to inline text and provider-native media. It is generated during
+model-message lowering, so the durable transcript keeps the original user text and attachment
+metadata without embedding security prose.
+
 ## Context Epochs
 
 V2 Sessions persist the exact privileged System Context shown to the model. A Context Epoch stores one immutable provider-cache baseline and a model-hidden structured snapshot used to compare independently observed Context Sources. Environment facts, the host-local date, ambient global/upward-project `AGENTS.md` files, and selected-agent available-skill guidance are the initial sources. Location-wide sources come from the System Context Registry; selected-agent guidance composes with them immediately before Context Epoch admission.
