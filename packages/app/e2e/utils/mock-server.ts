@@ -22,8 +22,53 @@ export interface MockServerConfig {
 export async function mockNovaClawServer(page: Page, config: MockServerConfig) {
   const cursors = new Map<string, string>()
   let nextCursor = 0
+  const sessions = config.sessions.map((session) => ({
+    cost: 0,
+    tokens: {
+      input: 0,
+      output: 0,
+      reasoning: 0,
+      cache: { read: 0, write: 0 },
+    },
+    location: { directory: config.directory },
+    ...session,
+  }))
+  const provider = config.provider as {
+    all?: Array<{
+      id: string
+      name: string
+      models?: Record<string, Record<string, unknown> & { id?: string; name?: string; variants?: Record<string, unknown> }>
+      [key: string]: unknown
+    }>
+    connected?: string[]
+    default?: Record<string, string>
+  }
+  const providerCatalog = {
+    providers: (provider.all ?? []).map((item) => ({
+      api: { id: item.id, type: "native", settings: {} },
+      request: { headers: {}, body: {} },
+      ...item,
+      models: undefined,
+    })),
+    models: (provider.all ?? []).flatMap((item) =>
+      Object.values(item.models ?? {}).map((model) => ({
+        ...model,
+        api: { id: model.id ?? "model", type: "native", settings: {} },
+        capabilities: {},
+        request: { headers: {}, body: {} },
+        variants: Object.keys(model.variants ?? {}).map((id) => ({ id, headers: {}, body: {} })),
+        time: { released: 0 },
+        cost: [],
+        status: "active",
+        enabled: true,
+        providerID: item.id,
+      })),
+    ),
+    connected: provider.connected ?? [],
+    default: provider.default ?? {},
+  }
   const staticRoutes: Record<string, unknown> = {
-    "/provider": config.provider,
+    "/provider": providerCatalog,
     "/path": {
       state: config.directory,
       config: config.directory,
@@ -49,6 +94,31 @@ export async function mockNovaClawServer(page: Page, config: MockServerConfig) {
     const path = url.pathname
     if (path === "/global/event" || path === "/event") return sse(route, config.events?.(), config.eventRetry)
     if (path === "/global/health") return json(route, { healthy: true })
+    if (path === "/api/session") return json(route, { data: sessions, cursor: {} })
+    if (path === "/api/session/active") return json(route, { data: {} })
+    if (path === "/api/tag") return json(route, { data: {} })
+    if (path === "/api/permission/request")
+      return json(route, {
+        location: {
+          directory: config.directory,
+          root: config.directory,
+          origin: config.directory,
+        },
+        data: (typeof config.permissions === "function" ? config.permissions() : (config.permissions ?? [])).map(
+          (permission) => {
+            if (!permission || typeof permission !== "object") return permission
+            const item = permission as Record<string, unknown>
+            return {
+              ...item,
+              action: item.action ?? item.permission,
+              resources: item.resources ?? item.patterns ?? [],
+              save: item.save ?? item.always,
+            }
+          },
+        ),
+      })
+    if (path === "/api/messenger/driver" || path === "/api/messenger/account" || path === "/api/messenger/binding")
+      return json(route, [])
     if (path === "/permission")
       return json(route, typeof config.permissions === "function" ? config.permissions() : (config.permissions ?? []))
     if (path === "/question")
@@ -64,9 +134,21 @@ export async function mockNovaClawServer(page: Page, config: MockServerConfig) {
       return json(route, session ?? {})
     }
 
+    const apiSessionMatch = path.match(/^\/api\/session\/([^/]+)$/)
+    if (apiSessionMatch) {
+      const session = sessions.find((item) => item.id === apiSessionMatch[1])
+      return json(route, { data: session })
+    }
+
     const todoMatch = path.match(/^\/session\/([^/]+)\/todo$/)
     if (todoMatch) return json(route, config.todos?.(todoMatch[1]!) ?? [])
     if (/^\/session\/[^/]+\/(children|diff)$/.test(path)) return json(route, [])
+
+    const apiTodoMatch = path.match(/^\/api\/session\/([^/]+)\/todo$/)
+    if (apiTodoMatch) return json(route, { data: config.todos?.(apiTodoMatch[1]!) ?? [] })
+
+    const apiMessagesMatch = path.match(/^\/api\/session\/([^/]+)\/message$/)
+    if (apiMessagesMatch) return json(route, { data: [], cursor: {} })
 
     const messagesMatch = path.match(/^\/session\/([^/]+)\/message$/)
     if (messagesMatch) {

@@ -75,7 +75,7 @@ test("shows a pending permission dock", async ({ page }) => {
   const reply = page.waitForRequest((request) => request.method() === "POST")
   await permission.getByRole("button", { name: "Allow once" }).click()
   const request = await reply
-  expect(new URL(request.url()).pathname).toBe(`/permission/permission-request/reply`)
+  expect(new URL(request.url()).pathname).toBe(`/api/session/${sessionID}/permission/permission-request/reply`)
   expect(request.postDataJSON()).toEqual({ reply: "allow-once" })
 })
 
@@ -103,7 +103,7 @@ test("deny with a reason sends the message on the reply", async ({ page }) => {
   const reply = page.waitForRequest((request) => request.method() === "POST")
   await permission.getByRole("button", { name: "Deny file" }).click()
   const request = await reply
-  expect(new URL(request.url()).pathname).toBe(`/permission/permission-request/reply`)
+  expect(new URL(request.url()).pathname).toBe(`/api/session/${sessionID}/permission/permission-request/reply`)
   expect(request.postDataJSON()).toEqual({ reply: "deny-file", message: "edit the template instead" })
 })
 

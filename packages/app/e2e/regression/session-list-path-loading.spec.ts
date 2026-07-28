@@ -23,6 +23,7 @@ test("shows loaded sessions before the directory path request resolves", async (
   })
 
   await page.addInitScript((directory) => {
+    localStorage.setItem("novaclaw.help.seen", "1")
     localStorage.setItem(
       "novaclaw.global.dat:server",
       JSON.stringify({
@@ -34,6 +35,7 @@ test("shows loaded sessions before the directory path request resolves", async (
 
   await page.goto("/")
   try {
+    await page.getByRole("button", { name: /^Chats/ }).click()
     await expectAppVisible(page.getByText(fixture.expected.sourceTitle).first())
   } finally {
     releasePath()
