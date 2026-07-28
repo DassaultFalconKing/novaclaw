@@ -111,7 +111,7 @@ function assertion(input: Partial<PermissionV2.AssertInput> = {}) {
   } satisfies PermissionV2.AssertInput
 }
 
-function waitForRequest() {
+function waitForRequest(input: PermissionV2.AssertInput = assertion()) {
   return Effect.gen(function* () {
     const service = yield* PermissionV2.Service
     const events = yield* EventV2.Service
@@ -122,7 +122,7 @@ function waitForRequest() {
         : Effect.void,
     )
     yield* Effect.addFinalizer(() => unsubscribe)
-    const fiber = yield* service.assert(assertion()).pipe(Effect.forkScoped)
+    const fiber = yield* service.assert(input).pipe(Effect.forkScoped)
     const request = yield* Deferred.await(asked)
     return { service, fiber, request }
   })
@@ -176,6 +176,36 @@ describe("PermissionV2", () => {
       const denied = yield* service.assert(assertion()).pipe(Effect.flip)
       expect(denied).toBeInstanceOf(PermissionV2.DeniedError)
       expect(yield* service.list()).toEqual([])
+    }),
+  )
+
+  it.effect("asks for attached-source consent below allow-all rules and honors the reply", () =>
+    Effect.gen(function* () {
+      yield* setup([{ action: "*", resource: "*", effect: "allow" }])
+      const sessionID = SessionV2.ID.make("ses_attachment_source")
+      yield* insertSession({ id: sessionID, permissionMode: "bypass" })
+      const input = assertion({
+        sessionID,
+        action: "edit",
+        resources: ["task.md"],
+        targetPaths: ["/project/task.md"],
+        attachmentPaths: ["/project/task.md"],
+      })
+      const { service, fiber, request } = yield* waitForRequest(input)
+      expect(request).toMatchObject({
+        action: "edit",
+        resources: ["task.md"],
+        metadata: {
+          attachmentProtection: true,
+          attachmentPath: "/project/task.md",
+        },
+      })
+      yield* service.reply({ requestID: request.id, reply: "allow-once" })
+      yield* Fiber.join(fiber)
+
+      expect(yield* service.ask(assertion({ sessionID, action: "create", resources: ["result.md"] }))).toMatchObject({
+        effect: "allow",
+      })
     }),
   )
 

@@ -12,6 +12,8 @@ export const Source = Schema.Struct({
 export interface FileAttachment extends Schema.Schema.Type<typeof FileAttachment> {}
 export const FileAttachment = Schema.Struct({
   uri: Schema.String,
+  /** Original local source identity when `uri` contains materialized attachment bytes. */
+  sourceUri: Schema.String.pipe(optional),
   mime: Schema.String,
   name: Schema.String.pipe(optional),
   description: Schema.String.pipe(optional),
@@ -23,6 +25,7 @@ export const FileAttachment = Schema.Struct({
       create: (input: FileAttachment) =>
         schema.make({
           uri: input.uri,
+          sourceUri: input.sourceUri,
           mime: input.mime,
           name: input.name,
           description: input.description,

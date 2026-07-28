@@ -96,3 +96,25 @@ describe("denialMessage — denial as observation (1J)", () => {
     expect(PermissionV2.denialMessage(undefined)).toBeUndefined()
   })
 })
+
+describe("protectedAttachmentPath — canonical attachment identity", () => {
+  test("requires consent for exact edit, overwrite, and trash targets", () => {
+    const attachments = ["/project/task.md"]
+    expect(PermissionV2.protectedAttachmentPath("edit", ["/project/task.md"], attachments)).toBe("/project/task.md")
+    expect(PermissionV2.protectedAttachmentPath("write", ["/project/task.md"], attachments)).toBe("/project/task.md")
+    expect(PermissionV2.protectedAttachmentPath("trash", ["/project/task.md"], attachments)).toBe("/project/task.md")
+  })
+
+  test("does not protect reads, outputs, duplicate basenames, or Linux case variants", () => {
+    const attachments = ["/project/spec/task.md"]
+    expect(PermissionV2.protectedAttachmentPath("read", attachments, attachments)).toBeUndefined()
+    expect(PermissionV2.protectedAttachmentPath("write", ["/project/result.md"], attachments)).toBeUndefined()
+    expect(PermissionV2.protectedAttachmentPath("write", ["/project/output/task.md"], attachments)).toBeUndefined()
+    expect(PermissionV2.protectedAttachmentPath("write", ["/project/spec/Task.md"], attachments)).toBeUndefined()
+  })
+
+  test("prompt text and steers cannot authorize a mutation", () => {
+    const attachments = ["/project/task.md"]
+    expect(PermissionV2.protectedAttachmentPath("edit", ["/project/task.md"], attachments)).toBe("/project/task.md")
+  })
+})

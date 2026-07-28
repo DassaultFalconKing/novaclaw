@@ -70,6 +70,7 @@ async function readPipedInput(hasMessage: boolean): Promise<string | undefined> 
 type FilePart = {
   type: "file"
   url: string
+  sourceUrl: string
   filename: string
   mime: string
 }
@@ -340,6 +341,7 @@ export const RunCommand = effectCmd({
           files.push({
             type: "file",
             url: content ? `data:${mime};base64,${content.toString("base64")}` : pathToFileURL(resolvedPath).href,
+            sourceUrl: pathToFileURL(resolvedPath).href,
             filename: path.basename(resolvedPath),
             mime,
           })
@@ -840,7 +842,7 @@ export const RunCommand = effectCmd({
           prompt: {
             text: message,
             ...(files.length > 0
-              ? { files: files.map((file) => ({ uri: file.url, name: file.filename })) }
+              ? { files: files.map((file) => ({ uri: file.url, sourceUri: file.sourceUrl, name: file.filename })) }
               : {}),
           },
         })

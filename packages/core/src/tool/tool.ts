@@ -11,6 +11,8 @@ export interface Context {
   readonly agent: AgentV2.ID
   readonly assistantMessageID: SessionMessage.ID
   readonly toolCallID: string
+  /** Canonical local paths of task attachments, resolved once for this provider turn. */
+  readonly attachmentPaths?: ReadonlySet<string>
 }
 
 export type SchemaType<A> = Schema.Codec<A, any, never, never>
