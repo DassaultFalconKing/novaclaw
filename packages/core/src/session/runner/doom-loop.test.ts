@@ -108,6 +108,16 @@ describe("toolTargetKey", () => {
     expect(toolTargetKey("read", '{"path":"x"}')).not.toBe(toolTargetKey("write", '{"path":"x"}'))
   })
 
+  test("malformed patch variants key on the same semantic file target", () => {
+    const inputs = [
+      { patchText: "- add binary-result.txt | BINARY_COMPLETION" },
+      { patchText: "Begin binary-result.txt\nBINARY_COMPLETION\nEnd binary-result.txt" },
+      { patchText: "--- /dev/null\n+++ binary-result.txt\n@@ -0,0 +1 @@\n+BINARY_COMPLETION" },
+      { patchText: "*** Begin Patch\n*** Add File: binary-result.txt\n+BINARY_COMPLETION\n*** End Patch" },
+    ]
+    expect(new Set(inputs.map((input) => toolTargetKey("apply_patch", JSON.stringify(input)))).size).toBe(1)
+  })
+
   test("unparseable input falls back to raw args, still keyed by tool", () => {
     expect(toolTargetKey("bash", "not json")).toBe(toolTargetKey("bash", "not json"))
     expect(toolTargetKey("bash", "not json")).not.toBe(toolTargetKey("read", "not json"))
@@ -115,7 +125,7 @@ describe("toolTargetKey", () => {
 })
 
 describe("detectFailureStreak", () => {
-  test("five same-target failures trips it", () => {
+  test("the threshold of same-target failures trips it", () => {
     const calls = Array.from({ length: 5 }, () => fail("bash", '{"command":"gcc x.c"}'))
     const streak = detectFailureStreak(calls)
     expect(streak?.count).toBe(5)
@@ -149,7 +159,7 @@ describe("detectFailureStreak", () => {
   })
 
   test("fewer than threshold does not trip", () => {
-    const calls = Array.from({ length: 4 }, () => fail("read", '{"path":"a"}'))
+    const calls = Array.from({ length: FAILURE_STREAK_THRESHOLD - 1 }, () => fail("read", '{"path":"a"}'))
     expect(detectFailureStreak(calls)).toBeUndefined()
   })
 
@@ -172,11 +182,18 @@ describe("detectFailureStreak", () => {
 
 describe("failureStreakMessage", () => {
   test("names count, tool, and target and says stop repeating", () => {
-    const msg = failureStreakMessage({ name: "bash", target: "gcc x.c", count: 5 })
-    expect(msg).toContain("5")
+    const msg = failureStreakMessage({ name: "bash", target: "gcc x.c", count: 3 })
+    expect(msg).toContain("3")
     expect(msg).toContain("`bash`")
     expect(msg).toContain("gcc x.c")
     expect(msg.toLowerCase()).toContain("stop repeating")
+  })
+
+  test("routes a failed patch loop to write and read", () => {
+    const msg = failureStreakMessage({ name: "apply_patch", target: "result.txt", count: 3 })
+    expect(msg).toContain("`write`")
+    expect(msg).toContain("`read`")
+    expect(msg).toContain("cosmetically different arguments")
   })
 })
 
