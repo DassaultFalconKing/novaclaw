@@ -1,5 +1,5 @@
 import { describe, expect } from "bun:test"
-import { Effect } from "effect"
+import { Effect, Exit } from "effect"
 import { Database } from "@novaclaw/core/database/database"
 import { AppNodeBuilder } from "@novaclaw/core/effect/app-node-builder"
 import { LayerNode } from "@novaclaw/core/effect/layer-node"
@@ -43,6 +43,8 @@ describe("SessionRead.list under", () => {
 
       const all = yield* SessionRead.list(db)
       expect(all).toHaveLength(5)
+
+      expect(Exit.isFailure(yield* Effect.exit(Effect.suspend(() => seed(db, "ses_relative", "repo"))))).toBeTrue()
     }),
   )
 })

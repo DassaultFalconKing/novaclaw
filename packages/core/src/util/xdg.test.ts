@@ -159,6 +159,8 @@ describe("Xdg.isSuspect", () => {
     expect(Xdg.isSuspect("")).toBe(true)
     expect(Xdg.isSuspect("   ")).toBe(true)
     expect(Xdg.isSuspect("novaclaw/data")).toBe(true)
+    expect(Xdg.isSuspect("C:novaclaw\\data")).toBe(true)
+    expect(Xdg.isSuspect("\\novaclaw\\data")).toBe(true)
   })
 
   test("accepts real absolute paths, and does not false-positive on a substring", () => {

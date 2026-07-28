@@ -64,7 +64,14 @@ export const baseDir = (
 
 /** True when a resolved directory is unusable — relative, empty, or carrying an "undefined" segment. */
 export const isSuspect = (value: string): boolean =>
-  value.trim() === "" || !path.isAbsolute(value) || value.split(/[\\/]/).includes("undefined")
+  value.trim() === "" ||
+  !isPortableAbsolute(value) ||
+  value.split(/[\\/]/).includes("undefined")
+
+function isPortableAbsolute(value: string) {
+  if (path.isAbsolute(value)) return true
+  return path.win32.isAbsolute(value) && path.win32.parse(value).root !== "\\"
+}
 
 /**
  * An explicit instance home, from `--home <dir>` / `--home=<dir>` on the command line or

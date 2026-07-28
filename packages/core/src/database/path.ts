@@ -1,10 +1,10 @@
-import nodePath from "path"
 import { customType } from "drizzle-orm/sqlite-core"
 import { AbsolutePath } from "../schema"
 
 function storagePath(input: string) {
-  if (process.platform !== "win32") return input
-  return input.replaceAll("\\", "/")
+  const result = input.replaceAll("\\", "/")
+  if (process.platform === "win32" || isWindowsStoragePath(result)) return result
+  return input
 }
 
 function isWindowsStoragePath(input: string) {
@@ -13,7 +13,7 @@ function isWindowsStoragePath(input: string) {
 
 function absolute(input: string) {
   const result = storagePath(input)
-  if (!nodePath.posix.isAbsolute(result) && !(process.platform === "win32" && isWindowsStoragePath(result))) {
+  if (!result.startsWith("/") && !isWindowsStoragePath(result)) {
     throw new Error(`Path is not absolute: ${input}`)
   }
   return result

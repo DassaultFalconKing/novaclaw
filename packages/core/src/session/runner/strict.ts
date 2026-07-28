@@ -261,7 +261,7 @@ export function lastUserText(context: readonly SessionMessage.Message[]): string
  *  recipes it was cooking spoke POSIX. Strict now runs the SAME shell the `bash` tool runs
  *  (`Shell.agentDefault()`), and this text follows it. */
 export function environmentFor(platform: NodeJS.Platform, shellPath: string = Shell.agentDefault()): string {
-  const isBash = Shell.name(shellPath) === "bash"
+  const isBash = (platform === "win32" ? path.win32 : path.posix).parse(shellPath).name.toLowerCase() === "bash"
   const shell = isBash
     ? `Each \`run\` command executes in a FRESH bash shell (\`${shellPath}\`) in the working directory; no PATH/cwd state persists between calls. Use POSIX syntax and FORWARD SLASHES \`/\` in ALL paths${platform === "win32" ? " (a Windows drive is `/c/...` to this bash)" : ""}. APPEND any needed directory inside the same command: \`PATH="$PATH:/dir/bin" your-command\` — PREPENDING a toolchain shadows the shell's own \`ls\`/\`head\`/\`cat\` and breaks later commands. Run a locally built program as \`./name\`. Reference files by relative path.`
     : platform === "win32"
