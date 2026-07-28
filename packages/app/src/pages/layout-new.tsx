@@ -1,5 +1,5 @@
-import { createEffect, Suspense, type ParentProps } from "solid-js"
-import { useNavigate } from "@solidjs/router"
+import { createEffect, Show, Suspense, type ParentProps } from "solid-js"
+import { useLocation, useNavigate } from "@solidjs/router"
 import { DebugBar } from "@/components/debug-bar"
 import { Titlebar, type TitlebarUpdate } from "@/components/titlebar"
 import { useJumpToAttentionCommand } from "@/apps/jump-to-attention"
@@ -14,6 +14,7 @@ export default function NewLayout(props: ParentProps) {
   const platform = usePlatform()
   const command = useCommand()
   const language = useLanguage()
+  const location = useLocation()
   const navigate = useNavigate()
   setNavigate(navigate)
   // Always-live from anywhere in the shell: mod+j → the chat that needs you (uix-improvement slice 3).
@@ -59,7 +60,30 @@ export default function NewLayout(props: ParentProps) {
     >
       <Titlebar update={update} />
       <main class="flex-1 min-h-0 min-w-0 overflow-x-hidden flex flex-col items-start contain-strict">
-        <Suspense>{props.children}</Suspense>
+        <Show when={`${location.pathname}${location.search}`} keyed>
+          <Suspense
+            fallback={
+              <div
+                role="status"
+                class="flex min-h-0 flex-1 self-stretch flex-col items-center justify-center gap-3 text-sm text-v2-text-text-faint"
+              >
+                <span>
+                  {language.t("common.loading")}
+                  {language.t("common.loading.ellipsis")}
+                </span>
+                <button
+                  type="button"
+                  class="rounded-md px-3 py-1.5 font-medium text-v2-text-text-muted transition-colors hover:bg-v2-background-bg-layer-02 hover:text-v2-text-text-base"
+                  onClick={() => navigate("/")}
+                >
+                  {language.t("home.title")}
+                </button>
+              </div>
+            }
+          >
+            {props.children}
+          </Suspense>
+        </Show>
       </main>
       {import.meta.env.DEV && <DebugBar inline />}
       {/* No floating HelpButton in the new layout — the Help app tile owns the tour (SP8; the old

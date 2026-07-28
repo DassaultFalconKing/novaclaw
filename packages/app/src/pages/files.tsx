@@ -61,7 +61,12 @@ export function FilesPage() {
   }
   const shape = (p: PathLike | undefined) =>
     p?.virtual && p.virtualRoot
-      ? { start: p.virtualRoot, roots: [] as readonly string[], home: "", places: [] as readonly { name: string; path: string }[] }
+      ? {
+          start: p.virtualRoot,
+          roots: [] as readonly string[],
+          home: "",
+          places: [] as readonly { name: string; path: string }[],
+        }
       : {
           start: p?.home || p?.directory || "",
           roots: p?.roots ?? [],
@@ -78,10 +83,10 @@ export function FilesPage() {
     return shape(got)
   })
   createEffect(() => {
-    const s = pathInfo()?.start
+    const s = pathInfo.latest?.start
     if (s && !dir()) setDir(s)
   })
-  const roots = createMemo(() => pathInfo()?.roots ?? [])
+  const roots = createMemo(() => pathInfo.latest?.roots ?? [])
   // The root the current dir lives under (case-insensitive — Windows drive letters), "" if unknown.
   const currentRoot = createMemo(() => {
     const d = dir().toLowerCase()
@@ -92,10 +97,12 @@ export function FilesPage() {
   // instance host's existing well-known dirs (/path `places`) and the user's `folder_bookmarks`
   // config pins (instance-wide, agent-editable). One canonical slash-normalized key for compares.
   const pinKey = (value: string) => value.replace(/\\/g, "/").replace(/\/+$/, "")
-  const places = createMemo(() => pathInfo()?.places ?? [])
-  const homeDir = createMemo(() => pathInfo()?.home ?? "")
+  const places = createMemo(() => pathInfo.latest?.places ?? [])
+  const homeDir = createMemo(() => pathInfo.latest?.home ?? "")
   const bookmarks = createMemo(
-    () => ((ctx()?.sync.data.config as { folder_bookmarks?: readonly string[] } | undefined)?.folder_bookmarks ?? []) as string[],
+    () =>
+      ((ctx()?.sync.data.config as { folder_bookmarks?: readonly string[] } | undefined)?.folder_bookmarks ??
+        []) as string[],
   )
   const isPinned = (target: string) => bookmarks().some((entry) => pinKey(entry) === pinKey(target))
   const writeBookmarks = (next: string[]) =>
@@ -105,7 +112,9 @@ export function FilesPage() {
   const toggleCurrentPin = () => {
     const target = pinKey(dir())
     if (!target) return
-    writeBookmarks(isPinned(target) ? bookmarks().filter((entry) => pinKey(entry) !== target) : [...bookmarks(), target])
+    writeBookmarks(
+      isPinned(target) ? bookmarks().filter((entry) => pinKey(entry) !== target) : [...bookmarks(), target],
+    )
   }
   const baseName = (value: string) => {
     const parts = value.split(/[\\/]/).filter(Boolean)
@@ -141,7 +150,7 @@ export function FilesPage() {
       name,
     )
   const visibleEntries = createMemo(() => {
-    const list = entries()
+    const list = entries.latest
     if (!list || showHidden()) return list
     return list.filter((e) => !isHiddenName(e.name))
   })
@@ -350,7 +359,9 @@ export function FilesPage() {
               <button
                 type="button"
                 class="flex min-w-0 items-center gap-1.5 rounded-md px-1.5 py-1 text-left text-xs text-v2-text-text-muted hover:bg-v2-background-bg-layer-01"
-                classList={{ "bg-v2-background-bg-layer-01 text-v2-text-text-base": pinKey(dir()) === pinKey(place.path) }}
+                classList={{
+                  "bg-v2-background-bg-layer-01 text-v2-text-text-base": pinKey(dir()) === pinKey(place.path),
+                }}
                 title={place.path}
                 onClick={() => goTo(place.path)}
               >
@@ -418,7 +429,7 @@ export function FilesPage() {
             </div>
             <div class="min-h-0 flex-1 overflow-auto py-1">
               <Show
-                when={trashEntries()}
+                when={trashEntries.latest}
                 fallback={
                   <div class="px-4 py-3 text-sm text-v2-text-text-faint">
                     {trashEntries.loading ? language.t("files.loading") : language.t("files.trashEmpty")}
@@ -426,12 +437,12 @@ export function FilesPage() {
                 }
               >
                 <Show
-                  when={trashEntries()!.length}
+                  when={trashEntries.latest!.length}
                   fallback={
                     <div class="px-4 py-3 text-sm text-v2-text-text-faint">{language.t("files.trashEmpty")}</div>
                   }
                 >
-                  <For each={trashEntries()}>
+                  <For each={trashEntries.latest}>
                     {(entry) => (
                       <div class="flex items-center gap-2 px-4 py-1.5 text-sm hover:bg-v2-background-bg-layer-02">
                         <Show when={entry.type === "directory"} fallback={<span class="size-4 shrink-0" />}>
@@ -469,7 +480,7 @@ export function FilesPage() {
             </div>
             <div class="min-h-0 flex-1 overflow-auto">
               <Show
-                when={preview()}
+                when={preview.latest}
                 fallback={<div class="px-4 py-3 text-sm text-v2-text-text-faint">{language.t("files.loading")}</div>}
               >
                 {(pv) => (
