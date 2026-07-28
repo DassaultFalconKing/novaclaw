@@ -130,6 +130,25 @@ const exists = (target: string) =>
 const it = testEffect(Layer.empty)
 
 describe("ApplyPatchTool", () => {
+  it.live("returns exact syntax and a write fallback for a malformed patch", () =>
+    Effect.acquireUseRelease(
+      Effect.promise(() => tmpdir()),
+      (tmp) =>
+        withTool(tmp.path, (registry) =>
+          Effect.gen(function* () {
+            const result = yield* executeTool(registry, call("Begin result.txt\nDONE\nEnd result.txt"))
+            expect(result.type).toBe("error")
+            if (result.type !== "error") return
+            expect(String(result.value)).toContain("*** Begin Patch")
+            expect(String(result.value)).toContain("*** Add File: path")
+            expect(String(result.value)).toContain("`write` tool instead")
+            expect(String(result.value)).toContain("Do not retry the same malformed patch")
+          }),
+        ),
+      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+    ),
+  )
+
   it.live("registers and sequentially applies add, update, and delete hunks", () =>
     Effect.acquireUseRelease(
       Effect.promise(() => tmpdir()),
