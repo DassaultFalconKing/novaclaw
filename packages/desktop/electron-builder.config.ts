@@ -62,6 +62,13 @@ const getBase = (appId: string): Configuration => ({
   asarUnpack: ["node_modules/@ladybugdb/**"],
   extraResources: [
     {
+      // BrowserWindow and dock icons are native resources. Electron cannot
+      // resolve them from the files bundled inside app.asar through
+      // process.resourcesPath, so keep a real copy beside app.asar.
+      from: "resources/icons/",
+      to: "icons/",
+    },
+    {
       from: "native/",
       to: "native/",
       filter: ["index.js", "index.d.ts", "build/Release/mac_window.node", "swift-build/**"],

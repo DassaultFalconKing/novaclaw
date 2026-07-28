@@ -23,6 +23,10 @@ for (const channel of channels) {
     expect(config.linux?.executableName).toBe(channel.appId)
     expect(config.linux?.desktop?.entry?.StartupWMClass).toBe(channel.appId)
     expect(config.linux?.target).toEqual(["AppImage", "deb", "rpm", "pacman"])
+    expect(config.extraResources).toContainEqual({
+      from: "resources/icons/",
+      to: "icons/",
+    })
     expect(config.pacman?.packageName).toBe(channel.packageName)
     expect(config.pacman?.compression).toBe("zstd")
     expect(config.pacman?.depends).toEqual([
