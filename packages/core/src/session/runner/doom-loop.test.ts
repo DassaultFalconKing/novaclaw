@@ -118,6 +118,20 @@ describe("toolTargetKey", () => {
     expect(new Set(inputs.map((input) => toolTargetKey("apply_patch", JSON.stringify(input)))).size).toBe(1)
   })
 
+  test("patches for different files have different semantic targets", () => {
+    expect(
+      toolTargetKey(
+        "apply_patch",
+        JSON.stringify({ patchText: "*** Begin Patch\n*** Add File: a.txt\n+a\n*** End Patch" }),
+      ),
+    ).not.toBe(
+      toolTargetKey(
+        "apply_patch",
+        JSON.stringify({ patchText: "*** Begin Patch\n*** Add File: b.txt\n+b\n*** End Patch" }),
+      ),
+    )
+  })
+
   test("unparseable input falls back to raw args, still keyed by tool", () => {
     expect(toolTargetKey("bash", "not json")).toBe(toolTargetKey("bash", "not json"))
     expect(toolTargetKey("bash", "not json")).not.toBe(toolTargetKey("read", "not json"))
