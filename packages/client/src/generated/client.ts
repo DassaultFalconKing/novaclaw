@@ -22,8 +22,6 @@ import type {
   SessionsRemoveOutput,
   SessionsForkInput,
   SessionsForkOutput,
-  SessionsPendingInput,
-  SessionsPendingOutput,
   SessionsTodoInput,
   SessionsTodoOutput,
   SessionsSwitchAgentInput,
@@ -68,8 +66,6 @@ import type {
   SessionsInterruptOutput,
   SessionsMessageInput,
   SessionsMessageOutput,
-  MessagesExportMarkdownInput,
-  MessagesExportMarkdownOutput,
   MessagesListInput,
   MessagesListOutput,
   ModelsListInput,
@@ -123,25 +119,6 @@ import type {
   MessengerLoginCompleteOutput,
   MessengerLoginCancelInput,
   MessengerLoginCancelOutput,
-  CalendarListSchedulesOutput,
-  CalendarCreateScheduleInput,
-  CalendarCreateScheduleOutput,
-  CalendarUpdateScheduleInput,
-  CalendarUpdateScheduleOutput,
-  CalendarRemoveScheduleInput,
-  CalendarRemoveScheduleOutput,
-  CalendarListFiresOutput,
-  RecipesListOutput,
-  RecipesGetInput,
-  RecipesGetOutput,
-  RecipesSaveInput,
-  RecipesSaveOutput,
-  RecipesDuplicateInput,
-  RecipesDuplicateOutput,
-  RecipesRemoveInput,
-  RecipesRemoveOutput,
-  RecipesRunInput,
-  RecipesRunOutput,
   PermissionsListRequestsInput,
   PermissionsListRequestsOutput,
   PermissionsListSavedInput,
@@ -398,7 +375,6 @@ export function make(options: ClientOptions) {
               introspection: input?.["introspection"],
               quality: input?.["quality"],
               affective: input?.["affective"],
-              completionGuard: input?.["completionGuard"],
             },
             successStatus: 200,
             declaredStatuses: [401, 400],
@@ -487,17 +463,6 @@ export function make(options: ClientOptions) {
             query: { messageID: input["messageID"] },
             successStatus: 200,
             declaredStatuses: [404, 400, 401],
-            empty: false,
-          },
-          requestOptions,
-        ).then((value) => value.data),
-      pending: (input: SessionsPendingInput, requestOptions?: RequestOptions) =>
-        request<{ readonly data: SessionsPendingOutput }>(
-          {
-            method: "GET",
-            path: `/api/session/${encodeURIComponent(input.sessionID)}/pending`,
-            successStatus: 200,
-            declaredStatuses: [404, 500, 400, 401],
             empty: false,
           },
           requestOptions,
@@ -767,18 +732,6 @@ export function make(options: ClientOptions) {
         ).then((value) => value.data),
     },
     messages: {
-      exportMarkdown: (input: MessagesExportMarkdownInput, requestOptions?: RequestOptions) =>
-        request<MessagesExportMarkdownOutput>(
-          {
-            method: "POST",
-            path: `/api/session/${encodeURIComponent(input.sessionID)}/export-markdown`,
-            body: { directory: input["directory"], filename: input["filename"] },
-            successStatus: 200,
-            declaredStatuses: [404, 400, 500, 401],
-            empty: false,
-          },
-          requestOptions,
-        ),
       list: (input: MessagesListInput, requestOptions?: RequestOptions) =>
         request<MessagesListOutput>(
           {
@@ -1135,160 +1088,6 @@ export function make(options: ClientOptions) {
             successStatus: 204,
             declaredStatuses: [401, 400],
             empty: true,
-          },
-          requestOptions,
-        ),
-    },
-    calendar: {
-      listSchedules: (requestOptions?: RequestOptions) =>
-        request<CalendarListSchedulesOutput>(
-          {
-            method: "GET",
-            path: `/api/calendar/schedule`,
-            successStatus: 200,
-            declaredStatuses: [401, 400],
-            empty: false,
-          },
-          requestOptions,
-        ),
-      createSchedule: (input: CalendarCreateScheduleInput, requestOptions?: RequestOptions) =>
-        request<CalendarCreateScheduleOutput>(
-          {
-            method: "POST",
-            path: `/api/calendar/schedule`,
-            body: {
-              title: input["title"],
-              recurrence: input["recurrence"],
-              tzOffsetMin: input["tzOffsetMin"],
-              prompt: input["prompt"],
-              agent: input["agent"],
-              model: input["model"],
-              location: input["location"],
-              permissionMode: input["permissionMode"],
-              enabled: input["enabled"],
-            },
-            successStatus: 200,
-            declaredStatuses: [400, 401],
-            empty: false,
-          },
-          requestOptions,
-        ),
-      updateSchedule: (input: CalendarUpdateScheduleInput, requestOptions?: RequestOptions) =>
-        request<CalendarUpdateScheduleOutput>(
-          {
-            method: "PATCH",
-            path: `/api/calendar/schedule/${encodeURIComponent(input.id)}`,
-            body: {
-              title: input["title"],
-              recurrence: input["recurrence"],
-              tzOffsetMin: input["tzOffsetMin"],
-              prompt: input["prompt"],
-              agent: input["agent"],
-              model: input["model"],
-              location: input["location"],
-              permissionMode: input["permissionMode"],
-              enabled: input["enabled"],
-            },
-            successStatus: 200,
-            declaredStatuses: [400, 401],
-            empty: false,
-          },
-          requestOptions,
-        ),
-      removeSchedule: (input: CalendarRemoveScheduleInput, requestOptions?: RequestOptions) =>
-        request<CalendarRemoveScheduleOutput>(
-          {
-            method: "DELETE",
-            path: `/api/calendar/schedule/${encodeURIComponent(input.id)}`,
-            successStatus: 204,
-            declaredStatuses: [401, 400],
-            empty: true,
-          },
-          requestOptions,
-        ),
-      listFires: (requestOptions?: RequestOptions) =>
-        request<CalendarListFiresOutput>(
-          {
-            method: "GET",
-            path: `/api/calendar/fires`,
-            successStatus: 200,
-            declaredStatuses: [401, 400],
-            empty: false,
-          },
-          requestOptions,
-        ),
-    },
-    recipes: {
-      list: (requestOptions?: RequestOptions) =>
-        request<RecipesListOutput>(
-          { method: "GET", path: `/api/recipe`, successStatus: 200, declaredStatuses: [401, 400], empty: false },
-          requestOptions,
-        ),
-      get: (input: RecipesGetInput, requestOptions?: RequestOptions) =>
-        request<RecipesGetOutput>(
-          {
-            method: "GET",
-            path: `/api/recipe/${encodeURIComponent(input.slug)}`,
-            successStatus: 200,
-            declaredStatuses: [400, 401],
-            empty: false,
-          },
-          requestOptions,
-        ),
-      save: (input: RecipesSaveInput, requestOptions?: RequestOptions) =>
-        request<RecipesSaveOutput>(
-          {
-            method: "POST",
-            path: `/api/recipe`,
-            body: {
-              slug: input["slug"],
-              name: input["name"],
-              description: input["description"],
-              prompt: input["prompt"],
-            },
-            successStatus: 200,
-            declaredStatuses: [400, 401],
-            empty: false,
-          },
-          requestOptions,
-        ),
-      duplicate: (input: RecipesDuplicateInput, requestOptions?: RequestOptions) =>
-        request<RecipesDuplicateOutput>(
-          {
-            method: "POST",
-            path: `/api/recipe/${encodeURIComponent(input.slug)}/duplicate`,
-            body: undefined,
-            successStatus: 200,
-            declaredStatuses: [400, 401],
-            empty: false,
-          },
-          requestOptions,
-        ),
-      remove: (input: RecipesRemoveInput, requestOptions?: RequestOptions) =>
-        request<RecipesRemoveOutput>(
-          {
-            method: "DELETE",
-            path: `/api/recipe/${encodeURIComponent(input.slug)}`,
-            successStatus: 204,
-            declaredStatuses: [401, 400],
-            empty: true,
-          },
-          requestOptions,
-        ),
-      run: (input: RecipesRunInput, requestOptions?: RequestOptions) =>
-        request<RecipesRunOutput>(
-          {
-            method: "POST",
-            path: `/api/recipe/${encodeURIComponent(input.slug)}/run`,
-            body: {
-              directory: input["directory"],
-              model: input["model"],
-              agent: input["agent"],
-              strict: input["strict"],
-            },
-            successStatus: 200,
-            declaredStatuses: [400, 401],
-            empty: false,
           },
           requestOptions,
         ),

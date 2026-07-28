@@ -20,6 +20,5 @@ export const Name = Schema.Literals([
   "thinkingBudget",
   "surgicalEdits",
   "askBeforeChanges",
-  "completionGuard",
 ])
 export type Name = typeof Name.Type

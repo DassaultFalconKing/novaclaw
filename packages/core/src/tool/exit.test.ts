@@ -41,10 +41,6 @@ describe("ExitTool.gateDecision", () => {
     expect(ExitTool.gateDecision({ type: "sub-agent", context: [] })).toBe("allow")
   })
 
-  test("restores the legacy one-phase exit when the completion guard is disabled", () => {
-    expect(ExitTool.gateDecision({ enabled: false, type: "goal-oriented", context: [] })).toBe("allow")
-  })
-
   test("requires a separate confirmation turn for unattended sessions", () => {
     expect(ExitTool.gateDecision({ type: "auto-prompting", evidence: "already supplied", context: [] })).toBe("confirm")
     expect(ExitTool.gateDecision({ type: "goal-oriented", context: [] })).toBe("confirm")

@@ -1631,7 +1631,6 @@ export const layer = Layer.effect(
       // Only the ON/OFF is per-session — cadence/commands/model internals stay global.
       const qualityOn = handoff.quality ?? qualityConfig.enabled
       const introspectionOn = handoff.introspection ?? introspectionConfig.enabled
-      const completionGuardOn = handoff.completionGuard ?? true
       // QE-A: quality mode with NO provisioned commands is inert — steer ONCE per session
       // to run the provisioner (deterministic manifest scan → verify → write project config).
       if (qualityOn && !Object.values(qualityConfig.commands).some(Boolean) && !provisionNudged.has(input.sessionID)) {
@@ -1674,12 +1673,7 @@ export const layer = Layer.effect(
           }
           const context = yield* getContext(input.sessionID)
           if (result.finishReason !== "length") finishRecovery.recoveries = 0
-          const finishDecision = FinishRecovery.decide(
-            result.finishReason,
-            result.needsContinuation,
-            finishRecovery,
-            completionGuardOn,
-          )
+          const finishDecision = FinishRecovery.decide(result.finishReason, result.needsContinuation, finishRecovery)
           // 1E doom-loop break: only while the model is still acting (made a tool call).
           // If its last few tool calls are byte-identical, inject a one-shot redirect as a
           // steer so the next turn is nudged to change approach.
@@ -1801,13 +1795,11 @@ export const layer = Layer.effect(
               // Names come from a fresh materialization: the settlement branch is a different scope from
               // the turn-attempt's own, and this runs at most once per drain (registry read, no I/O).
               // A failure here must never break the drain — degrade to the name-free tells.
-              const offeredToolNames = completionGuardOn
-                ? yield* tools.materialize().pipe(
-                    Effect.map((materialized) => materialized.definitions.map((definition) => definition.name)),
-                    Effect.catchCause(() => Effect.succeed([] as string[])),
-                  )
-                : []
-              const attempted = TextualCall.detectWhenEnabled(completionGuardOn, finalText, offeredToolNames)
+              const offeredToolNames = yield* tools.materialize().pipe(
+                Effect.map((materialized) => materialized.definitions.map((definition) => definition.name)),
+                Effect.catchCause(() => Effect.succeed([] as string[])),
+              )
+              const attempted = TextualCall.detect(finalText, offeredToolNames)
               if (attempted) {
                 textualNudged = true
                 yield* Effect.logInfo("textual tool-call recovery", {

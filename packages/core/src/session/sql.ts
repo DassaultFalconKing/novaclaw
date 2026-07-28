@@ -61,7 +61,6 @@ export const SessionTable = sqliteTable(
     thinking_budget: integer({ mode: "boolean" }),
     surgical_edits: integer({ mode: "boolean" }),
     ask_before_changes: integer({ mode: "boolean" }),
-    completion_guard: integer({ mode: "boolean" }),
     result: text({ mode: "json" }).$type<unknown>(),
     ...Timestamps,
     time_compacting: integer(),

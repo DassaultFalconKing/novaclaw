@@ -12,7 +12,7 @@ describe("detect — the turns that actually shipped a silent no-op", () => {
       "",
       "**Step 1: Initial searches**",
       "",
-      "```bash",
+      '```bash',
       `bash -c "echo 'Starting LNR/DNR influencer research'"`,
       "```",
     ].join("\n")
@@ -96,13 +96,5 @@ describe("recoveryMessage", () => {
     expect(message).toContain("do not invent a tool")
     // The escape hatch matters: a legitimate illustration must be able to end the turn honestly.
     expect(message).toContain("only an illustration")
-  })
-})
-
-describe("detectWhenEnabled", () => {
-  test("the Completion guard switch disables textual-call recovery without executing the text", () => {
-    const text = "```bash\npwd\n```"
-    expect(TextualCall.detectWhenEnabled(true, text, TOOLS)?.tell).toBe("fenced-tool")
-    expect(TextualCall.detectWhenEnabled(false, text, TOOLS)).toBeUndefined()
   })
 })

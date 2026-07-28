@@ -64,21 +64,6 @@ This reduces horizon failures but is not a completion guarantee:
 | Round or wall-clock cap expires          | Durable history/Strict checkpoints remain resumable and the cap notice names `resume`. Set `strict.wallMinutes` from the task budget; do not silently disable the watchdog.                                     |
 | Context overflow or truncated generation | Keep steps atomic, compact before pressure, and use separate reasoning/execution budgets. One terminal `finish_reason=length` is continued; a repeat pauses with an explicit provider/configuration diagnostic. |
 
-### Completion guard and textual tool calls
-
-`Tune -> Completion guard` is ON by default and is a per-session, inherited override. Turning it
-OFF restores the legacy one-phase `exit`, disables the one-shot `finish_reason=length` continuation,
-and disables the corrective steer for tool calls printed as Markdown/XML. It never executes text as
-a command.
-
-The 2026-07-28 local llama.cpp check separated parser failure from model choice: the active Q6 9B
-model returned structured `tool_calls` with both `tool_choice=required` and the normal auto mode.
-Therefore an intermittent Markdown call in a long task is not evidence of a permanently broken wire
-parser. The likely path is a small/abliterated model choosing explanatory content under auto tool
-choice and context pressure. Inspect the raw response before changing the chat template: structured
-`tool_calls` indicate a model-policy miss; literal `<tool_call>` in `message.content` indicates a
-template/parser mismatch.
-
 ## Context Epochs
 
 V2 Sessions persist the exact privileged System Context shown to the model. A Context Epoch stores one immutable provider-cache baseline and a model-hidden structured snapshot used to compare independently observed Context Sources. Environment facts, the host-local date, ambient global/upward-project `AGENTS.md` files, and selected-agent available-skill guidance are the initial sources. Location-wide sources come from the System Context Registry; selected-agent guidance composes with them immediately before Context Epoch admission.

@@ -335,7 +335,7 @@ function renderImportedEffectFiles(
       const request = (["params", "query", "headers", "payload"] as const)
         .flatMap((source) => {
           const fields = item.input.filter((field) => field.source === source)
-          if (fields.length === 0) return source === "payload" && item.payloads.length > 0 ? ["payload: {}"] : []
+          if (fields.length === 0) return []
           return [
             `${source}: { ${fields.map((field) => `${JSON.stringify(field.name)}: input${item.operation.inputMode === "optional" ? "?." : ""}[${JSON.stringify(field.name)}]`).join(", ")} }`,
           ]

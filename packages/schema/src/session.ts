@@ -62,7 +62,6 @@ export const Info = Schema.Struct({
   thinkingBudget: Schema.Boolean.pipe(optional),
   surgicalEdits: Schema.Boolean.pipe(optional),
   askBeforeChanges: Schema.Boolean.pipe(optional),
-  completionGuard: Schema.Boolean.pipe(optional),
   result: Schema.Unknown.pipe(optional),
   cost: Schema.Finite,
   tokens: Schema.Struct({

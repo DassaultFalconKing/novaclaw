@@ -159,7 +159,6 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S>(sessionLo
           introspection: Schema.Boolean.pipe(Schema.optional),
           quality: Schema.Boolean.pipe(Schema.optional),
           affective: Schema.Boolean.pipe(Schema.optional),
-          completionGuard: Schema.Boolean.pipe(Schema.optional),
         }),
         success: Schema.Struct({ data: Session.Info }),
       }).annotateMerge(
@@ -439,8 +438,7 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S>(sessionLo
         .annotateMerge(
           OpenApi.annotations({
             identifier: "v2.session.switchFeature",
-            summary:
-              "Set a per-session harness-feature override (introspection · quality · affective · completionGuard)",
+            summary: "Set a per-session harness-feature override (introspection · quality · affective · thinkingBudget)",
             description:
               "Enable/disable one harness feature for this session; null clears the override back to inherit (parent chain, then global config). Applies from the next turn.",
           }),
