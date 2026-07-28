@@ -38,7 +38,9 @@ describe("SessionStrict.milestone", () => {
     expect(SessionStrict.milestone(seq({ type: "expanded", step: "root", children: 3 }))).toContain("3 children")
   })
   test("safety events always surface, at any depth", () => {
-    expect(SessionStrict.milestone(seq({ type: "restored_best", step: "root.2.3.4", score: 0.8, reason: "drop" }))).toContain("restored_best")
+    expect(
+      SessionStrict.milestone(seq({ type: "restored_best", step: "root.2.3.4", score: 0.8, reason: "drop" })),
+    ).toContain("restored_best")
     expect(SessionStrict.milestone(seq({ type: "coord_mode", step: "root.9.9", file: "a.c" }))).toContain("coord_mode")
     expect(SessionStrict.milestone(seq({ type: "task_blocked", reason: "wall_exhausted" }))).toContain("wall_exhausted")
   })
@@ -55,7 +57,13 @@ describe("SessionStrict.lastUserText", () => {
     expect(SessionStrict.lastUserText([user("first"), assistant(), user("second")])).toBe("second")
   })
   test("skips harness-provenance steers and blank messages", () => {
-    expect(SessionStrict.lastUserText([user("real task"), user(`${SessionInput.STEER_PROVENANCE_PREFIX}nudge`), user("   ")])).toBe("real task")
+    expect(
+      SessionStrict.lastUserText([
+        user("real task"),
+        user(`${SessionInput.STEER_PROVENANCE_PREFIX}nudge`),
+        user("   "),
+      ]),
+    ).toBe("real task")
     expect(SessionStrict.lastUserText([assistant()])).toBeUndefined()
   })
 })
@@ -218,9 +226,18 @@ describe("SessionStrict.summaryPrompt (P14.1 final answer)", () => {
       appliedFiles: [],
     })
     expect(p.user).toContain("build the widget")
-    expect(p.user).toContain("completed — every step verified")
+    expect(p.user).toContain("whole-task completion was judged")
     expect(p.user).toContain("committed root.1")
     expect(p.system).toContain("ONLY on the journal")
+  })
+  test("names a mechanical completion authority when one is available", () => {
+    const p = SessionStrict.summaryPrompt({
+      goal: "g",
+      status: "done",
+      completionAuthority: "mechanical",
+      milestones: [],
+    })
+    expect(p.user).toContain("mechanical completion oracle passed")
   })
   test("stopped runs carry the reason and the kept-best framing", () => {
     const p = SessionStrict.summaryPrompt({ goal: "g", status: "blocked", reason: "aborted", milestones: [] })
@@ -318,9 +335,9 @@ describe("SessionStrict.materializingExecutor (P14.1 materialization)", () => {
   })
   const call = (tool: string, args: Record<string, unknown>, executor: ReturnType<typeof fake>, sink: unknown[]) =>
     Effect.runPromise(
-      SessionStrict.materializingExecutor(executor as never, (action) =>
-        Effect.sync(() => void sink.push(action)),
-      ).run({ tool, args, produces: [], cwd: "." }),
+      SessionStrict.materializingExecutor(executor as never, (action) => Effect.sync(() => void sink.push(action))).run(
+        { tool, args, produces: [], cwd: "." },
+      ),
     )
 
   test("state-changing tools + run are reported; reads and notes are not", async () => {
@@ -355,8 +372,9 @@ describe("SessionStrict.materializingExecutor (P14.1 materialization)", () => {
 
   test("a throwing reporter never breaks the engine action", async () => {
     const result = await Effect.runPromise(
-      SessionStrict.materializingExecutor(fake(true, "fine") as never, () =>
-        Effect.fail(new Error("reporter died")) as never,
+      SessionStrict.materializingExecutor(
+        fake(true, "fine") as never,
+        () => Effect.fail(new Error("reporter died")) as never,
       ).run({ tool: "run", args: {}, produces: [], cwd: "." }),
     )
     expect(result.ok).toBe(true)
@@ -374,7 +392,9 @@ describe("SessionStrict.reviveForResume (P14.1 resume fix)", () => {
       log: [],
       telemetry: new Map(),
     } as never
-    const revived = SessionStrict.reviveForResume(state) as never as { tree: { nodes: Map<string, { status: string }> } }
+    const revived = SessionStrict.reviveForResume(state) as never as {
+      tree: { nodes: Map<string, { status: string }> }
+    }
     expect(revived.tree.nodes.get("root")!.status).toBe("pending")
   })
 
@@ -384,7 +404,10 @@ describe("SessionStrict.reviveForResume (P14.1 resume fix)", () => {
     const revived = SessionStrict.reviveForResume(state)
     expect(revived).toBe(state) // no blocked nodes → identity (no copy churn)
     const mixed = {
-      tree: { root: "root", nodes: new Map([node("root", "expanded"), node("root.1", "committed"), node("root.2", "blocked")]) },
+      tree: {
+        root: "root",
+        nodes: new Map([node("root", "expanded"), node("root.1", "committed"), node("root.2", "blocked")]),
+      },
       artifacts: [],
       log: [],
       telemetry: new Map(),

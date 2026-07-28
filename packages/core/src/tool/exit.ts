@@ -6,6 +6,8 @@ import { DateTime, Effect, Layer, Schema } from "effect"
 import { makeLocationNode } from "../effect/app-node"
 import { EventV2 } from "../event"
 import { SessionEvent } from "../session/event"
+import { SessionMessage } from "../session/message"
+import { SessionStore } from "../session/store"
 import { ToolRegistry } from "./registry"
 import { Tool } from "./tool"
 import { Tools } from "./tools"
@@ -23,22 +25,55 @@ export const Input = Schema.Struct({
   result: Schema.String.pipe(Schema.optional).annotate({
     description: "A short summary of what this session accomplished — handed to whoever spawned/awaits it.",
   }),
+  evidence: Schema.String.pipe(Schema.optional).annotate({
+    description:
+      "For an unattended session's confirmation call: concise evidence that the opening request's acceptance criteria are met.",
+  }),
 })
 
 const StructuredOutput = Schema.Struct({ completed: Schema.Boolean })
 const Output = Schema.Struct({ ...StructuredOutput.fields, message: Schema.String })
 type Output = typeof Output.Type
 
+export const CONFIRMATION_REQUIRED = "EXIT_CONFIRMATION_REQUIRED"
+export const EVIDENCE_REQUIRED = "EXIT_EVIDENCE_REQUIRED"
+
+export type GateDecision = "allow" | "confirm" | "evidence"
+
+export function gateDecision(input: {
+  readonly type?: string
+  readonly evidence?: string
+  readonly context: ReadonlyArray<SessionMessage.Message>
+}): GateDecision {
+  if (input.type !== "auto-prompting" && input.type !== "goal-oriented") return "allow"
+  const confirmed = input.context.some(
+    (message) =>
+      message.type === "assistant" &&
+      message.content.some(
+        (part) =>
+          part.type === "tool" &&
+          part.name === name &&
+          part.state.status === "error" &&
+          part.state.error.message.includes(CONFIRMATION_REQUIRED),
+      ),
+  )
+  if (!confirmed) return "confirm"
+  return input.evidence?.trim() ? "allow" : "evidence"
+}
+
 export const layer = Layer.effectDiscard(
   Effect.gen(function* () {
     const tools = yield* Tools.Service
     const events = yield* EventV2.Service
+    const sessions = yield* SessionStore.Service
     yield* tools
       .register({
         [name]: Tool.make({
           description:
             "Mark this session complete and record its result (the session's 'return'). Use it when an " +
-            "autonomous or delegated task is finished; whoever spawned this session (and calls wait) receives the result.",
+            "autonomous or delegated task is finished; whoever spawned this session (and calls wait) receives the result. " +
+            "Unattended sessions require two calls: the first requests completion; then verify the opening request's " +
+            "acceptance criteria and call again with concise evidence.",
           input: Input,
           output: Output,
           structured: StructuredOutput,
@@ -46,6 +81,24 @@ export const layer = Layer.effectDiscard(
           toModelOutput: ({ output }) => [{ type: "text", text: output.message }],
           execute: (input, context) =>
             Effect.gen(function* () {
+              const session = yield* sessions.get(context.sessionID)
+              const gate = gateDecision({
+                type: session?.type,
+                evidence: input.evidence,
+                context: yield* sessions.context(context.sessionID),
+              })
+              if (gate === "confirm")
+                return yield* new ToolFailure({
+                  message:
+                    `${CONFIRMATION_REQUIRED}: Completion was not recorded. Re-read the opening request, ` +
+                    "check its acceptance criteria against tool/workspace evidence, then call exit again with result and evidence.",
+                })
+              if (gate === "evidence")
+                return yield* new ToolFailure({
+                  message:
+                    `${EVIDENCE_REQUIRED}: Completion was not recorded. Call exit again with concise evidence ` +
+                    "from checks, tool results, or the produced artifact.",
+                })
               const timestamp = yield* DateTime.now
               yield* events.publish(SessionEvent.Completed, {
                 sessionID: context.sessionID,
@@ -66,4 +119,8 @@ export const layer = Layer.effectDiscard(
   }),
 )
 
-export const node = makeLocationNode({ name: "tool/exit", layer, deps: [ToolRegistry.node, EventV2.node] })
+export const node = makeLocationNode({
+  name: "tool/exit",
+  layer,
+  deps: [ToolRegistry.node, EventV2.node, SessionStore.node],
+})

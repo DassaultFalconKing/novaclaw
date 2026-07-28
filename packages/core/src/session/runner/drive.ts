@@ -70,7 +70,7 @@ const GOAL_CONTINUE =
 
 const capNotice = (reason: string) =>
   `⏸️ Autonomous run paused ${reason} without calling exit. ` +
-  "Review what it did so far — sending any message continues the run."
+  "Review what it did so far — send `resume` (or any message) to continue from the durable session history."
 
 /**
  * One drive decision at drain-end (queue empty). `continue` → steer `message` and keep the
@@ -82,7 +82,8 @@ export const decide = (session: DriveSession | undefined, state: DriveState, now
   if (type === undefined) return { kind: "stop" }
   // exit(result) called — the terminal test (exit records "" for a bare exit, so `!== undefined`).
   if (session !== undefined && session.result !== undefined) return { kind: "stop" }
-  if (state.rounds >= MAX_DRIVE_ROUNDS) return { kind: "cap", notice: capNotice(`after ${state.rounds} self-prompted rounds`) }
+  if (state.rounds >= MAX_DRIVE_ROUNDS)
+    return { kind: "cap", notice: capNotice(`after ${state.rounds} self-prompted rounds`) }
   if (nowMs - state.startedAt >= MAX_DRIVE_WALL_MS)
     return { kind: "cap", notice: capNotice(`after ${Math.round((nowMs - state.startedAt) / 60_000)} minutes`) }
   return { kind: "continue", message: type === "auto-prompting" ? AUTO_CONTINUE : GOAL_CONTINUE }
