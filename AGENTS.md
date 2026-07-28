@@ -14,8 +14,8 @@ through a shell-like UI (task manager, launcher, apps).
    and the extension seams (MCP, plugins, the app registry).
 2. **A user-friendly HTML UI** — the desktop (Electron) and web apps that make driving agents
    pleasant for non-experts. NovaClaw is **HTML-UI-only**: there is no interactive terminal UI, and
-   the CLI is **headless-only** (`serve`, one-shot `run`, browser launch, and maintenance). See the
-   plan repo's AGENTS.md → *Identity & mission*.
+   the CLI is **headless-only** (`serve`, one-shot `run`, health, tests). See the plan repo's
+   AGENTS.md → *Identity & mission*.
 
 Everything else is deliberately **not** kernel: LSP servers, code indexers, editor
 integrations, and similar developer services are things an **agent sets up for itself** when
@@ -27,14 +27,6 @@ doubt about a feature: if it isn't kernel or UI, it's an app.
 NovaClaw runs entirely against local models (e.g. vLLM on a DGX Spark) — no paid APIs, no
 telemetry, no data egress. Cloud model endpoints are optional *devices* a user may add, never
 dependencies.
-
-## Technical guide
-
-Read `NOVACLAW-TECHNICAL-GUIDE.md` before you change an unfamiliar subsystem.
-
-The guide defines runtime modes, package ownership, technology boundaries, checks, and maintenance risks.
-
-Update the guide when you change an architecture boundary or a supported technology.
 
 ## Repository layout
 
