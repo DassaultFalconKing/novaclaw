@@ -88,6 +88,13 @@ export const detect = (text: string, toolNames: ReadonlyArray<string>): TextualC
   return undefined
 }
 
+/** Per-session A/B seam for the composer's Completion guard switch. */
+export const detectWhenEnabled = (
+  enabled: boolean,
+  text: string,
+  toolNames: ReadonlyArray<string>,
+): TextualCall | undefined => (enabled ? detect(text, toolNames) : undefined)
+
 /** The corrective steer. Names the mistake, demands a real call, and leaves an honest way out. */
 export const recoveryMessage = (found: TextualCall): string =>
   `Your last turn ended without calling any tool, but it contained what looks like a tool call written as ` +

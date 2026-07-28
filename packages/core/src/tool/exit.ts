@@ -5,8 +5,10 @@ import { SessionStatusEvent } from "@novaclaw/schema/session-status-event"
 import { DateTime, Effect, Layer, Schema } from "effect"
 import { makeLocationNode } from "../effect/app-node"
 import { EventV2 } from "../event"
+import { EFFECTIVE_CONFIG_DEFAULTS, resolveSessionConfig } from "../session/config-resolve"
 import { SessionEvent } from "../session/event"
 import { SessionMessage } from "../session/message"
+import { SessionSchema } from "../session/schema"
 import { SessionStore } from "../session/store"
 import { ToolRegistry } from "./registry"
 import { Tool } from "./tool"
@@ -41,10 +43,12 @@ export const EVIDENCE_REQUIRED = "EXIT_EVIDENCE_REQUIRED"
 export type GateDecision = "allow" | "confirm" | "evidence"
 
 export function gateDecision(input: {
+  readonly enabled?: boolean
   readonly type?: string
   readonly evidence?: string
   readonly context: ReadonlyArray<SessionMessage.Message>
 }): GateDecision {
+  if (input.enabled === false) return "allow"
   if (input.type !== "auto-prompting" && input.type !== "goal-oriented") return "allow"
   const confirmed = input.context.some(
     (message) =>
@@ -72,8 +76,8 @@ export const layer = Layer.effectDiscard(
           description:
             "Mark this session complete and record its result (the session's 'return'). Use it when an " +
             "autonomous or delegated task is finished; whoever spawned this session (and calls wait) receives the result. " +
-            "Unattended sessions require two calls: the first requests completion; then verify the opening request's " +
-            "acceptance criteria and call again with concise evidence.",
+            "When Completion guard is enabled, unattended sessions require two calls: the first requests completion; " +
+            "then verify the opening request's acceptance criteria and call again with concise evidence.",
           input: Input,
           output: Output,
           structured: StructuredOutput,
@@ -81,9 +85,12 @@ export const layer = Layer.effectDiscard(
           toModelOutput: ({ output }) => [{ type: "text", text: output.message }],
           execute: (input, context) =>
             Effect.gen(function* () {
-              const session = yield* sessions.get(context.sessionID)
+              const config = yield* resolveSessionConfig(EFFECTIVE_CONFIG_DEFAULTS, context.sessionID, (id) =>
+                sessions.get(id as SessionSchema.ID),
+              )
               const gate = gateDecision({
-                type: session?.type,
+                enabled: config.completionGuard ?? true,
+                type: config.type,
                 evidence: input.evidence,
                 context: yield* sessions.context(context.sessionID),
               })

@@ -42,6 +42,14 @@ export type MessageNotFoundError = {
 export const isMessageNotFoundError = (value: unknown): value is MessageNotFoundError =>
   typeof value === "object" && value !== null && "_tag" in value && value["_tag"] === "MessageNotFoundError"
 
+export type UnknownError = {
+  readonly _tag: "UnknownError"
+  readonly message: string
+  readonly ref?: string | undefined
+}
+export const isUnknownError = (value: unknown): value is UnknownError =>
+  typeof value === "object" && value !== null && "_tag" in value && value["_tag"] === "UnknownError"
+
 export type ConflictError = {
   readonly _tag: "ConflictError"
   readonly message: string
@@ -57,14 +65,6 @@ export type ServiceUnavailableError = {
 }
 export const isServiceUnavailableError = (value: unknown): value is ServiceUnavailableError =>
   typeof value === "object" && value !== null && "_tag" in value && value["_tag"] === "ServiceUnavailableError"
-
-export type UnknownError = {
-  readonly _tag: "UnknownError"
-  readonly message: string
-  readonly ref?: string | undefined
-}
-export const isUnknownError = (value: unknown): value is UnknownError =>
-  typeof value === "object" && value !== null && "_tag" in value && value["_tag"] === "UnknownError"
 
 export type ProviderNotFoundError = {
   readonly _tag: "ProviderNotFoundError"
@@ -249,6 +249,10 @@ export type SessionsListOutput = {
     readonly introspection?: boolean
     readonly quality?: boolean
     readonly affective?: boolean
+    readonly thinkingBudget?: boolean
+    readonly surgicalEdits?: boolean
+    readonly askBeforeChanges?: boolean
+    readonly completionGuard?: boolean
     readonly result?: JsonValue
     readonly cost: number
     readonly tokens: {
@@ -311,6 +315,7 @@ export type SessionsCreateInput = {
     readonly introspection?: boolean | null
     readonly quality?: boolean | null
     readonly affective?: boolean | null
+    readonly completionGuard?: boolean | null
   }["id"]
   readonly parentID?: {
     readonly id?: string | null
@@ -332,6 +337,7 @@ export type SessionsCreateInput = {
     readonly introspection?: boolean | null
     readonly quality?: boolean | null
     readonly affective?: boolean | null
+    readonly completionGuard?: boolean | null
   }["parentID"]
   readonly agent?: {
     readonly id?: string | null
@@ -353,6 +359,7 @@ export type SessionsCreateInput = {
     readonly introspection?: boolean | null
     readonly quality?: boolean | null
     readonly affective?: boolean | null
+    readonly completionGuard?: boolean | null
   }["agent"]
   readonly model?: {
     readonly id?: string | null
@@ -374,6 +381,7 @@ export type SessionsCreateInput = {
     readonly introspection?: boolean | null
     readonly quality?: boolean | null
     readonly affective?: boolean | null
+    readonly completionGuard?: boolean | null
   }["model"]
   readonly systemPromptOverride?: {
     readonly id?: string | null
@@ -395,6 +403,7 @@ export type SessionsCreateInput = {
     readonly introspection?: boolean | null
     readonly quality?: boolean | null
     readonly affective?: boolean | null
+    readonly completionGuard?: boolean | null
   }["systemPromptOverride"]
   readonly type?: {
     readonly id?: string | null
@@ -416,6 +425,7 @@ export type SessionsCreateInput = {
     readonly introspection?: boolean | null
     readonly quality?: boolean | null
     readonly affective?: boolean | null
+    readonly completionGuard?: boolean | null
   }["type"]
   readonly priority?: {
     readonly id?: string | null
@@ -437,6 +447,7 @@ export type SessionsCreateInput = {
     readonly introspection?: boolean | null
     readonly quality?: boolean | null
     readonly affective?: boolean | null
+    readonly completionGuard?: boolean | null
   }["priority"]
   readonly permissionMode?: {
     readonly id?: string | null
@@ -458,6 +469,7 @@ export type SessionsCreateInput = {
     readonly introspection?: boolean | null
     readonly quality?: boolean | null
     readonly affective?: boolean | null
+    readonly completionGuard?: boolean | null
   }["permissionMode"]
   readonly location?: {
     readonly id?: string | null
@@ -479,6 +491,7 @@ export type SessionsCreateInput = {
     readonly introspection?: boolean | null
     readonly quality?: boolean | null
     readonly affective?: boolean | null
+    readonly completionGuard?: boolean | null
   }["location"]
   readonly title?: {
     readonly id?: string | null
@@ -500,6 +513,7 @@ export type SessionsCreateInput = {
     readonly introspection?: boolean | null
     readonly quality?: boolean | null
     readonly affective?: boolean | null
+    readonly completionGuard?: boolean | null
   }["title"]
   readonly permission?: {
     readonly id?: string | null
@@ -521,6 +535,7 @@ export type SessionsCreateInput = {
     readonly introspection?: boolean | null
     readonly quality?: boolean | null
     readonly affective?: boolean | null
+    readonly completionGuard?: boolean | null
   }["permission"]
   readonly strict?: {
     readonly id?: string | null
@@ -542,6 +557,7 @@ export type SessionsCreateInput = {
     readonly introspection?: boolean | null
     readonly quality?: boolean | null
     readonly affective?: boolean | null
+    readonly completionGuard?: boolean | null
   }["strict"]
   readonly introspection?: {
     readonly id?: string | null
@@ -563,6 +579,7 @@ export type SessionsCreateInput = {
     readonly introspection?: boolean | null
     readonly quality?: boolean | null
     readonly affective?: boolean | null
+    readonly completionGuard?: boolean | null
   }["introspection"]
   readonly quality?: {
     readonly id?: string | null
@@ -584,6 +601,7 @@ export type SessionsCreateInput = {
     readonly introspection?: boolean | null
     readonly quality?: boolean | null
     readonly affective?: boolean | null
+    readonly completionGuard?: boolean | null
   }["quality"]
   readonly affective?: {
     readonly id?: string | null
@@ -605,7 +623,30 @@ export type SessionsCreateInput = {
     readonly introspection?: boolean | null
     readonly quality?: boolean | null
     readonly affective?: boolean | null
+    readonly completionGuard?: boolean | null
   }["affective"]
+  readonly completionGuard?: {
+    readonly id?: string | null
+    readonly parentID?: string | null
+    readonly agent?: string | null
+    readonly model?: { readonly id: string; readonly providerID: string; readonly variant?: string } | null
+    readonly systemPromptOverride?: string | null
+    readonly type?: "interactive" | "sub-agent" | "auto-prompting" | "goal-oriented" | null
+    readonly priority?: number | null
+    readonly permissionMode?: "plan" | "ask" | "surgical" | "bypass" | "yolo" | null
+    readonly location?: { readonly directory: string; readonly workspaceID?: string } | null
+    readonly title?: string | null
+    readonly permission?: ReadonlyArray<{
+      readonly permission: string
+      readonly pattern: string
+      readonly action: "allow" | "deny" | "ask"
+    }> | null
+    readonly strict?: { readonly enabled?: boolean; readonly attempts?: number; readonly wallMinutes?: number } | null
+    readonly introspection?: boolean | null
+    readonly quality?: boolean | null
+    readonly affective?: boolean | null
+    readonly completionGuard?: boolean | null
+  }["completionGuard"]
 }
 
 export type SessionsCreateOutput = {
@@ -631,6 +672,10 @@ export type SessionsCreateOutput = {
     readonly introspection?: boolean
     readonly quality?: boolean
     readonly affective?: boolean
+    readonly thinkingBudget?: boolean
+    readonly surgicalEdits?: boolean
+    readonly askBeforeChanges?: boolean
+    readonly completionGuard?: boolean
     readonly result?: JsonValue
     readonly cost: number
     readonly tokens: {
@@ -707,6 +752,10 @@ export type SessionsGetOutput = {
     readonly introspection?: boolean
     readonly quality?: boolean
     readonly affective?: boolean
+    readonly thinkingBudget?: boolean
+    readonly surgicalEdits?: boolean
+    readonly askBeforeChanges?: boolean
+    readonly completionGuard?: boolean
     readonly result?: JsonValue
     readonly cost: number
     readonly tokens: {
@@ -772,6 +821,10 @@ export type SessionsChildrenOutput = {
     readonly introspection?: boolean
     readonly quality?: boolean
     readonly affective?: boolean
+    readonly thinkingBudget?: boolean
+    readonly surgicalEdits?: boolean
+    readonly askBeforeChanges?: boolean
+    readonly completionGuard?: boolean
     readonly result?: JsonValue
     readonly cost: number
     readonly tokens: {
@@ -854,6 +907,10 @@ export type SessionsUpdateOutput = {
     readonly introspection?: boolean
     readonly quality?: boolean
     readonly affective?: boolean
+    readonly thinkingBudget?: boolean
+    readonly surgicalEdits?: boolean
+    readonly askBeforeChanges?: boolean
+    readonly completionGuard?: boolean
     readonly result?: JsonValue
     readonly cost: number
     readonly tokens: {
@@ -926,6 +983,10 @@ export type SessionsForkOutput = {
     readonly introspection?: boolean
     readonly quality?: boolean
     readonly affective?: boolean
+    readonly thinkingBudget?: boolean
+    readonly surgicalEdits?: boolean
+    readonly askBeforeChanges?: boolean
+    readonly completionGuard?: boolean
     readonly result?: JsonValue
     readonly cost: number
     readonly tokens: {
@@ -964,6 +1025,17 @@ export type SessionsForkOutput = {
       }>
     }
   }
+}["data"]
+
+export type SessionsPendingInput = { readonly sessionID: { readonly sessionID: string }["sessionID"] }
+
+export type SessionsPendingOutput = {
+  readonly data: ReadonlyArray<{
+    readonly id: string
+    readonly text: string
+    readonly delivery: string
+    readonly timeCreated: number
+  }>
 }["data"]
 
 export type SessionsTodoInput = { readonly sessionID: { readonly sessionID: string }["sessionID"] }
@@ -1016,11 +1088,25 @@ export type SessionsSwitchStrictOutput = void
 export type SessionsSwitchFeatureInput = {
   readonly sessionID: { readonly sessionID: string }["sessionID"]
   readonly feature: {
-    readonly feature: "introspection" | "quality" | "affective"
+    readonly feature:
+      | "introspection"
+      | "quality"
+      | "affective"
+      | "thinkingBudget"
+      | "surgicalEdits"
+      | "askBeforeChanges"
+      | "completionGuard"
     readonly enabled: boolean | null
   }["feature"]
   readonly enabled: {
-    readonly feature: "introspection" | "quality" | "affective"
+    readonly feature:
+      | "introspection"
+      | "quality"
+      | "affective"
+      | "thinkingBudget"
+      | "surgicalEdits"
+      | "askBeforeChanges"
+      | "completionGuard"
     readonly enabled: boolean | null
   }["enabled"]
 }
@@ -1588,7 +1674,14 @@ export type SessionsHistoryOutput = {
           readonly timestamp: number
           readonly sessionID: string
           readonly messageID: string
-          readonly feature: "introspection" | "quality" | "affective"
+          readonly feature:
+            | "introspection"
+            | "quality"
+            | "affective"
+            | "thinkingBudget"
+            | "surgicalEdits"
+            | "askBeforeChanges"
+            | "completionGuard"
           readonly enabled: boolean | null
         }
       }
@@ -2365,7 +2458,14 @@ export type SessionsEventsOutput =
         readonly timestamp: number
         readonly sessionID: string
         readonly messageID: string
-        readonly feature: "introspection" | "quality" | "affective"
+        readonly feature:
+          | "introspection"
+          | "quality"
+          | "affective"
+          | "thinkingBudget"
+          | "surgicalEdits"
+          | "askBeforeChanges"
+          | "completionGuard"
         readonly enabled: boolean | null
       }
     }
@@ -3224,6 +3324,18 @@ export type SessionsMessageOutput = {
       }
 }["data"]
 
+export type MessagesExportMarkdownInput = {
+  readonly sessionID: { readonly sessionID: string }["sessionID"]
+  readonly directory: { readonly directory: string; readonly filename?: string | undefined }["directory"]
+  readonly filename?: { readonly directory: string; readonly filename?: string | undefined }["filename"]
+}
+
+export type MessagesExportMarkdownOutput = {
+  readonly path: string
+  readonly messageCount: number
+  readonly running: boolean
+}
+
 export type MessagesListInput = {
   readonly sessionID: { readonly sessionID: string }["sessionID"]
   readonly limit?: {
@@ -3829,6 +3941,8 @@ export type MessengerListDriversOutput = ReadonlyArray<{
         readonly when?: { readonly key: string; readonly op: "eq" | "neq"; readonly value: string }
       }
   >
+  readonly loginStyle?: "code" | "browser"
+  readonly setup?: { readonly url?: string; readonly urlLabel?: string; readonly steps: ReadonlyArray<string> }
   readonly capabilities: {
     readonly listChats: "full" | "seen" | "none"
     readonly files: {
@@ -3845,6 +3959,8 @@ export type MessengerListDriversOutput = ReadonlyArray<{
       readonly kick: boolean
       readonly mute: boolean
       readonly pin: boolean
+      readonly approve?: boolean
+      readonly lock?: boolean
     }
     readonly format: "plain" | "markdown" | "html"
     readonly maxChars: number | "Infinity" | "-Infinity" | "NaN"
@@ -4044,20 +4160,25 @@ export type MessengerLoginBeginInput = {
 export type MessengerLoginBeginOutput = {
   readonly attemptID: string
   readonly instructions: string
-  readonly time: { readonly created: number; readonly expires: number }
+  readonly qrImage?: string
+  readonly time: {
+    readonly created: number | "Infinity" | "-Infinity" | "NaN"
+    readonly expires: number | "Infinity" | "-Infinity" | "NaN"
+  }
 }
 
 export type MessengerLoginStatusInput = { readonly attemptID: { readonly attemptID: string }["attemptID"] }
 
-export type MessengerLoginStatusOutput =
-  | { readonly status: "pending"; readonly time: { readonly created: number; readonly expires: number } }
-  | { readonly status: "complete"; readonly time: { readonly created: number; readonly expires: number } }
-  | {
-      readonly status: "failed"
-      readonly message: string
-      readonly time: { readonly created: number; readonly expires: number }
-    }
-  | { readonly status: "expired"; readonly time: { readonly created: number; readonly expires: number } }
+export type MessengerLoginStatusOutput = {
+  readonly status: "pending" | "complete" | "failed" | "expired"
+  readonly message?: string
+  readonly instructions?: string
+  readonly qrImage?: string
+  readonly time: {
+    readonly created: number | "Infinity" | "-Infinity" | "NaN"
+    readonly expires: number | "Infinity" | "-Infinity" | "NaN"
+  }
+}
 
 export type MessengerLoginCompleteInput = {
   readonly attemptID: { readonly attemptID: string }["attemptID"]
@@ -4069,6 +4190,789 @@ export type MessengerLoginCompleteOutput = void
 export type MessengerLoginCancelInput = { readonly attemptID: { readonly attemptID: string }["attemptID"] }
 
 export type MessengerLoginCancelOutput = void
+
+export type CalendarListSchedulesOutput = ReadonlyArray<{
+  readonly id: string
+  readonly title: string
+  readonly recurrence:
+    | { readonly kind: "once"; readonly at: number }
+    | { readonly kind: "daily"; readonly time: { readonly hour: number; readonly minute: number } }
+    | {
+        readonly kind: "weekly"
+        readonly time: { readonly hour: number; readonly minute: number }
+        readonly weekdays: ReadonlyArray<number>
+      }
+    | {
+        readonly kind: "monthly"
+        readonly time: { readonly hour: number; readonly minute: number }
+        readonly day: number
+      }
+    | {
+        readonly kind: "yearly"
+        readonly time: { readonly hour: number; readonly minute: number }
+        readonly month: number
+        readonly day: number
+      }
+  readonly tzOffsetMin: number
+  readonly prompt: string
+  readonly agent: string | null
+  readonly model: string | null
+  readonly location: string | null
+  readonly permissionMode: string | null
+  readonly enabled: boolean
+  readonly nextFireAt: number | null
+  readonly lastFiredAt: number | null
+  readonly timeCreated: number
+  readonly timeUpdated: number
+}>
+
+export type CalendarCreateScheduleInput = {
+  readonly title?: {
+    readonly title?: string | undefined
+    readonly recurrence:
+      | { readonly kind: "once"; readonly at: number }
+      | { readonly kind: "daily"; readonly time: { readonly hour: number; readonly minute: number } }
+      | {
+          readonly kind: "weekly"
+          readonly time: { readonly hour: number; readonly minute: number }
+          readonly weekdays: ReadonlyArray<number>
+        }
+      | {
+          readonly kind: "monthly"
+          readonly time: { readonly hour: number; readonly minute: number }
+          readonly day: number
+        }
+      | {
+          readonly kind: "yearly"
+          readonly time: { readonly hour: number; readonly minute: number }
+          readonly month: number
+          readonly day: number
+        }
+    readonly tzOffsetMin?: number | undefined
+    readonly prompt: string
+    readonly agent?: string | undefined
+    readonly model?: string | undefined
+    readonly location?: string | undefined
+    readonly permissionMode?: string | undefined
+    readonly enabled?: boolean | undefined
+  }["title"]
+  readonly recurrence: {
+    readonly title?: string | undefined
+    readonly recurrence:
+      | { readonly kind: "once"; readonly at: number }
+      | { readonly kind: "daily"; readonly time: { readonly hour: number; readonly minute: number } }
+      | {
+          readonly kind: "weekly"
+          readonly time: { readonly hour: number; readonly minute: number }
+          readonly weekdays: ReadonlyArray<number>
+        }
+      | {
+          readonly kind: "monthly"
+          readonly time: { readonly hour: number; readonly minute: number }
+          readonly day: number
+        }
+      | {
+          readonly kind: "yearly"
+          readonly time: { readonly hour: number; readonly minute: number }
+          readonly month: number
+          readonly day: number
+        }
+    readonly tzOffsetMin?: number | undefined
+    readonly prompt: string
+    readonly agent?: string | undefined
+    readonly model?: string | undefined
+    readonly location?: string | undefined
+    readonly permissionMode?: string | undefined
+    readonly enabled?: boolean | undefined
+  }["recurrence"]
+  readonly tzOffsetMin?: {
+    readonly title?: string | undefined
+    readonly recurrence:
+      | { readonly kind: "once"; readonly at: number }
+      | { readonly kind: "daily"; readonly time: { readonly hour: number; readonly minute: number } }
+      | {
+          readonly kind: "weekly"
+          readonly time: { readonly hour: number; readonly minute: number }
+          readonly weekdays: ReadonlyArray<number>
+        }
+      | {
+          readonly kind: "monthly"
+          readonly time: { readonly hour: number; readonly minute: number }
+          readonly day: number
+        }
+      | {
+          readonly kind: "yearly"
+          readonly time: { readonly hour: number; readonly minute: number }
+          readonly month: number
+          readonly day: number
+        }
+    readonly tzOffsetMin?: number | undefined
+    readonly prompt: string
+    readonly agent?: string | undefined
+    readonly model?: string | undefined
+    readonly location?: string | undefined
+    readonly permissionMode?: string | undefined
+    readonly enabled?: boolean | undefined
+  }["tzOffsetMin"]
+  readonly prompt: {
+    readonly title?: string | undefined
+    readonly recurrence:
+      | { readonly kind: "once"; readonly at: number }
+      | { readonly kind: "daily"; readonly time: { readonly hour: number; readonly minute: number } }
+      | {
+          readonly kind: "weekly"
+          readonly time: { readonly hour: number; readonly minute: number }
+          readonly weekdays: ReadonlyArray<number>
+        }
+      | {
+          readonly kind: "monthly"
+          readonly time: { readonly hour: number; readonly minute: number }
+          readonly day: number
+        }
+      | {
+          readonly kind: "yearly"
+          readonly time: { readonly hour: number; readonly minute: number }
+          readonly month: number
+          readonly day: number
+        }
+    readonly tzOffsetMin?: number | undefined
+    readonly prompt: string
+    readonly agent?: string | undefined
+    readonly model?: string | undefined
+    readonly location?: string | undefined
+    readonly permissionMode?: string | undefined
+    readonly enabled?: boolean | undefined
+  }["prompt"]
+  readonly agent?: {
+    readonly title?: string | undefined
+    readonly recurrence:
+      | { readonly kind: "once"; readonly at: number }
+      | { readonly kind: "daily"; readonly time: { readonly hour: number; readonly minute: number } }
+      | {
+          readonly kind: "weekly"
+          readonly time: { readonly hour: number; readonly minute: number }
+          readonly weekdays: ReadonlyArray<number>
+        }
+      | {
+          readonly kind: "monthly"
+          readonly time: { readonly hour: number; readonly minute: number }
+          readonly day: number
+        }
+      | {
+          readonly kind: "yearly"
+          readonly time: { readonly hour: number; readonly minute: number }
+          readonly month: number
+          readonly day: number
+        }
+    readonly tzOffsetMin?: number | undefined
+    readonly prompt: string
+    readonly agent?: string | undefined
+    readonly model?: string | undefined
+    readonly location?: string | undefined
+    readonly permissionMode?: string | undefined
+    readonly enabled?: boolean | undefined
+  }["agent"]
+  readonly model?: {
+    readonly title?: string | undefined
+    readonly recurrence:
+      | { readonly kind: "once"; readonly at: number }
+      | { readonly kind: "daily"; readonly time: { readonly hour: number; readonly minute: number } }
+      | {
+          readonly kind: "weekly"
+          readonly time: { readonly hour: number; readonly minute: number }
+          readonly weekdays: ReadonlyArray<number>
+        }
+      | {
+          readonly kind: "monthly"
+          readonly time: { readonly hour: number; readonly minute: number }
+          readonly day: number
+        }
+      | {
+          readonly kind: "yearly"
+          readonly time: { readonly hour: number; readonly minute: number }
+          readonly month: number
+          readonly day: number
+        }
+    readonly tzOffsetMin?: number | undefined
+    readonly prompt: string
+    readonly agent?: string | undefined
+    readonly model?: string | undefined
+    readonly location?: string | undefined
+    readonly permissionMode?: string | undefined
+    readonly enabled?: boolean | undefined
+  }["model"]
+  readonly location?: {
+    readonly title?: string | undefined
+    readonly recurrence:
+      | { readonly kind: "once"; readonly at: number }
+      | { readonly kind: "daily"; readonly time: { readonly hour: number; readonly minute: number } }
+      | {
+          readonly kind: "weekly"
+          readonly time: { readonly hour: number; readonly minute: number }
+          readonly weekdays: ReadonlyArray<number>
+        }
+      | {
+          readonly kind: "monthly"
+          readonly time: { readonly hour: number; readonly minute: number }
+          readonly day: number
+        }
+      | {
+          readonly kind: "yearly"
+          readonly time: { readonly hour: number; readonly minute: number }
+          readonly month: number
+          readonly day: number
+        }
+    readonly tzOffsetMin?: number | undefined
+    readonly prompt: string
+    readonly agent?: string | undefined
+    readonly model?: string | undefined
+    readonly location?: string | undefined
+    readonly permissionMode?: string | undefined
+    readonly enabled?: boolean | undefined
+  }["location"]
+  readonly permissionMode?: {
+    readonly title?: string | undefined
+    readonly recurrence:
+      | { readonly kind: "once"; readonly at: number }
+      | { readonly kind: "daily"; readonly time: { readonly hour: number; readonly minute: number } }
+      | {
+          readonly kind: "weekly"
+          readonly time: { readonly hour: number; readonly minute: number }
+          readonly weekdays: ReadonlyArray<number>
+        }
+      | {
+          readonly kind: "monthly"
+          readonly time: { readonly hour: number; readonly minute: number }
+          readonly day: number
+        }
+      | {
+          readonly kind: "yearly"
+          readonly time: { readonly hour: number; readonly minute: number }
+          readonly month: number
+          readonly day: number
+        }
+    readonly tzOffsetMin?: number | undefined
+    readonly prompt: string
+    readonly agent?: string | undefined
+    readonly model?: string | undefined
+    readonly location?: string | undefined
+    readonly permissionMode?: string | undefined
+    readonly enabled?: boolean | undefined
+  }["permissionMode"]
+  readonly enabled?: {
+    readonly title?: string | undefined
+    readonly recurrence:
+      | { readonly kind: "once"; readonly at: number }
+      | { readonly kind: "daily"; readonly time: { readonly hour: number; readonly minute: number } }
+      | {
+          readonly kind: "weekly"
+          readonly time: { readonly hour: number; readonly minute: number }
+          readonly weekdays: ReadonlyArray<number>
+        }
+      | {
+          readonly kind: "monthly"
+          readonly time: { readonly hour: number; readonly minute: number }
+          readonly day: number
+        }
+      | {
+          readonly kind: "yearly"
+          readonly time: { readonly hour: number; readonly minute: number }
+          readonly month: number
+          readonly day: number
+        }
+    readonly tzOffsetMin?: number | undefined
+    readonly prompt: string
+    readonly agent?: string | undefined
+    readonly model?: string | undefined
+    readonly location?: string | undefined
+    readonly permissionMode?: string | undefined
+    readonly enabled?: boolean | undefined
+  }["enabled"]
+}
+
+export type CalendarCreateScheduleOutput = {
+  readonly id: string
+  readonly title: string
+  readonly recurrence:
+    | { readonly kind: "once"; readonly at: number }
+    | { readonly kind: "daily"; readonly time: { readonly hour: number; readonly minute: number } }
+    | {
+        readonly kind: "weekly"
+        readonly time: { readonly hour: number; readonly minute: number }
+        readonly weekdays: ReadonlyArray<number>
+      }
+    | {
+        readonly kind: "monthly"
+        readonly time: { readonly hour: number; readonly minute: number }
+        readonly day: number
+      }
+    | {
+        readonly kind: "yearly"
+        readonly time: { readonly hour: number; readonly minute: number }
+        readonly month: number
+        readonly day: number
+      }
+  readonly tzOffsetMin: number
+  readonly prompt: string
+  readonly agent: string | null
+  readonly model: string | null
+  readonly location: string | null
+  readonly permissionMode: string | null
+  readonly enabled: boolean
+  readonly nextFireAt: number | null
+  readonly lastFiredAt: number | null
+  readonly timeCreated: number
+  readonly timeUpdated: number
+}
+
+export type CalendarUpdateScheduleInput = {
+  readonly id: { readonly id: string }["id"]
+  readonly title?: {
+    readonly title?: string | undefined
+    readonly recurrence?:
+      | (
+          | { readonly kind: "once"; readonly at: number }
+          | { readonly kind: "daily"; readonly time: { readonly hour: number; readonly minute: number } }
+          | {
+              readonly kind: "weekly"
+              readonly time: { readonly hour: number; readonly minute: number }
+              readonly weekdays: ReadonlyArray<number>
+            }
+          | {
+              readonly kind: "monthly"
+              readonly time: { readonly hour: number; readonly minute: number }
+              readonly day: number
+            }
+          | {
+              readonly kind: "yearly"
+              readonly time: { readonly hour: number; readonly minute: number }
+              readonly month: number
+              readonly day: number
+            }
+        )
+      | undefined
+    readonly tzOffsetMin?: number | undefined
+    readonly prompt?: string | undefined
+    readonly agent?: string | null | undefined
+    readonly model?: string | null | undefined
+    readonly location?: string | null | undefined
+    readonly permissionMode?: string | null | undefined
+    readonly enabled?: boolean | undefined
+  }["title"]
+  readonly recurrence?: {
+    readonly title?: string | undefined
+    readonly recurrence?:
+      | (
+          | { readonly kind: "once"; readonly at: number }
+          | { readonly kind: "daily"; readonly time: { readonly hour: number; readonly minute: number } }
+          | {
+              readonly kind: "weekly"
+              readonly time: { readonly hour: number; readonly minute: number }
+              readonly weekdays: ReadonlyArray<number>
+            }
+          | {
+              readonly kind: "monthly"
+              readonly time: { readonly hour: number; readonly minute: number }
+              readonly day: number
+            }
+          | {
+              readonly kind: "yearly"
+              readonly time: { readonly hour: number; readonly minute: number }
+              readonly month: number
+              readonly day: number
+            }
+        )
+      | undefined
+    readonly tzOffsetMin?: number | undefined
+    readonly prompt?: string | undefined
+    readonly agent?: string | null | undefined
+    readonly model?: string | null | undefined
+    readonly location?: string | null | undefined
+    readonly permissionMode?: string | null | undefined
+    readonly enabled?: boolean | undefined
+  }["recurrence"]
+  readonly tzOffsetMin?: {
+    readonly title?: string | undefined
+    readonly recurrence?:
+      | (
+          | { readonly kind: "once"; readonly at: number }
+          | { readonly kind: "daily"; readonly time: { readonly hour: number; readonly minute: number } }
+          | {
+              readonly kind: "weekly"
+              readonly time: { readonly hour: number; readonly minute: number }
+              readonly weekdays: ReadonlyArray<number>
+            }
+          | {
+              readonly kind: "monthly"
+              readonly time: { readonly hour: number; readonly minute: number }
+              readonly day: number
+            }
+          | {
+              readonly kind: "yearly"
+              readonly time: { readonly hour: number; readonly minute: number }
+              readonly month: number
+              readonly day: number
+            }
+        )
+      | undefined
+    readonly tzOffsetMin?: number | undefined
+    readonly prompt?: string | undefined
+    readonly agent?: string | null | undefined
+    readonly model?: string | null | undefined
+    readonly location?: string | null | undefined
+    readonly permissionMode?: string | null | undefined
+    readonly enabled?: boolean | undefined
+  }["tzOffsetMin"]
+  readonly prompt?: {
+    readonly title?: string | undefined
+    readonly recurrence?:
+      | (
+          | { readonly kind: "once"; readonly at: number }
+          | { readonly kind: "daily"; readonly time: { readonly hour: number; readonly minute: number } }
+          | {
+              readonly kind: "weekly"
+              readonly time: { readonly hour: number; readonly minute: number }
+              readonly weekdays: ReadonlyArray<number>
+            }
+          | {
+              readonly kind: "monthly"
+              readonly time: { readonly hour: number; readonly minute: number }
+              readonly day: number
+            }
+          | {
+              readonly kind: "yearly"
+              readonly time: { readonly hour: number; readonly minute: number }
+              readonly month: number
+              readonly day: number
+            }
+        )
+      | undefined
+    readonly tzOffsetMin?: number | undefined
+    readonly prompt?: string | undefined
+    readonly agent?: string | null | undefined
+    readonly model?: string | null | undefined
+    readonly location?: string | null | undefined
+    readonly permissionMode?: string | null | undefined
+    readonly enabled?: boolean | undefined
+  }["prompt"]
+  readonly agent?: {
+    readonly title?: string | undefined
+    readonly recurrence?:
+      | (
+          | { readonly kind: "once"; readonly at: number }
+          | { readonly kind: "daily"; readonly time: { readonly hour: number; readonly minute: number } }
+          | {
+              readonly kind: "weekly"
+              readonly time: { readonly hour: number; readonly minute: number }
+              readonly weekdays: ReadonlyArray<number>
+            }
+          | {
+              readonly kind: "monthly"
+              readonly time: { readonly hour: number; readonly minute: number }
+              readonly day: number
+            }
+          | {
+              readonly kind: "yearly"
+              readonly time: { readonly hour: number; readonly minute: number }
+              readonly month: number
+              readonly day: number
+            }
+        )
+      | undefined
+    readonly tzOffsetMin?: number | undefined
+    readonly prompt?: string | undefined
+    readonly agent?: string | null | undefined
+    readonly model?: string | null | undefined
+    readonly location?: string | null | undefined
+    readonly permissionMode?: string | null | undefined
+    readonly enabled?: boolean | undefined
+  }["agent"]
+  readonly model?: {
+    readonly title?: string | undefined
+    readonly recurrence?:
+      | (
+          | { readonly kind: "once"; readonly at: number }
+          | { readonly kind: "daily"; readonly time: { readonly hour: number; readonly minute: number } }
+          | {
+              readonly kind: "weekly"
+              readonly time: { readonly hour: number; readonly minute: number }
+              readonly weekdays: ReadonlyArray<number>
+            }
+          | {
+              readonly kind: "monthly"
+              readonly time: { readonly hour: number; readonly minute: number }
+              readonly day: number
+            }
+          | {
+              readonly kind: "yearly"
+              readonly time: { readonly hour: number; readonly minute: number }
+              readonly month: number
+              readonly day: number
+            }
+        )
+      | undefined
+    readonly tzOffsetMin?: number | undefined
+    readonly prompt?: string | undefined
+    readonly agent?: string | null | undefined
+    readonly model?: string | null | undefined
+    readonly location?: string | null | undefined
+    readonly permissionMode?: string | null | undefined
+    readonly enabled?: boolean | undefined
+  }["model"]
+  readonly location?: {
+    readonly title?: string | undefined
+    readonly recurrence?:
+      | (
+          | { readonly kind: "once"; readonly at: number }
+          | { readonly kind: "daily"; readonly time: { readonly hour: number; readonly minute: number } }
+          | {
+              readonly kind: "weekly"
+              readonly time: { readonly hour: number; readonly minute: number }
+              readonly weekdays: ReadonlyArray<number>
+            }
+          | {
+              readonly kind: "monthly"
+              readonly time: { readonly hour: number; readonly minute: number }
+              readonly day: number
+            }
+          | {
+              readonly kind: "yearly"
+              readonly time: { readonly hour: number; readonly minute: number }
+              readonly month: number
+              readonly day: number
+            }
+        )
+      | undefined
+    readonly tzOffsetMin?: number | undefined
+    readonly prompt?: string | undefined
+    readonly agent?: string | null | undefined
+    readonly model?: string | null | undefined
+    readonly location?: string | null | undefined
+    readonly permissionMode?: string | null | undefined
+    readonly enabled?: boolean | undefined
+  }["location"]
+  readonly permissionMode?: {
+    readonly title?: string | undefined
+    readonly recurrence?:
+      | (
+          | { readonly kind: "once"; readonly at: number }
+          | { readonly kind: "daily"; readonly time: { readonly hour: number; readonly minute: number } }
+          | {
+              readonly kind: "weekly"
+              readonly time: { readonly hour: number; readonly minute: number }
+              readonly weekdays: ReadonlyArray<number>
+            }
+          | {
+              readonly kind: "monthly"
+              readonly time: { readonly hour: number; readonly minute: number }
+              readonly day: number
+            }
+          | {
+              readonly kind: "yearly"
+              readonly time: { readonly hour: number; readonly minute: number }
+              readonly month: number
+              readonly day: number
+            }
+        )
+      | undefined
+    readonly tzOffsetMin?: number | undefined
+    readonly prompt?: string | undefined
+    readonly agent?: string | null | undefined
+    readonly model?: string | null | undefined
+    readonly location?: string | null | undefined
+    readonly permissionMode?: string | null | undefined
+    readonly enabled?: boolean | undefined
+  }["permissionMode"]
+  readonly enabled?: {
+    readonly title?: string | undefined
+    readonly recurrence?:
+      | (
+          | { readonly kind: "once"; readonly at: number }
+          | { readonly kind: "daily"; readonly time: { readonly hour: number; readonly minute: number } }
+          | {
+              readonly kind: "weekly"
+              readonly time: { readonly hour: number; readonly minute: number }
+              readonly weekdays: ReadonlyArray<number>
+            }
+          | {
+              readonly kind: "monthly"
+              readonly time: { readonly hour: number; readonly minute: number }
+              readonly day: number
+            }
+          | {
+              readonly kind: "yearly"
+              readonly time: { readonly hour: number; readonly minute: number }
+              readonly month: number
+              readonly day: number
+            }
+        )
+      | undefined
+    readonly tzOffsetMin?: number | undefined
+    readonly prompt?: string | undefined
+    readonly agent?: string | null | undefined
+    readonly model?: string | null | undefined
+    readonly location?: string | null | undefined
+    readonly permissionMode?: string | null | undefined
+    readonly enabled?: boolean | undefined
+  }["enabled"]
+}
+
+export type CalendarUpdateScheduleOutput = {
+  readonly id: string
+  readonly title: string
+  readonly recurrence:
+    | { readonly kind: "once"; readonly at: number }
+    | { readonly kind: "daily"; readonly time: { readonly hour: number; readonly minute: number } }
+    | {
+        readonly kind: "weekly"
+        readonly time: { readonly hour: number; readonly minute: number }
+        readonly weekdays: ReadonlyArray<number>
+      }
+    | {
+        readonly kind: "monthly"
+        readonly time: { readonly hour: number; readonly minute: number }
+        readonly day: number
+      }
+    | {
+        readonly kind: "yearly"
+        readonly time: { readonly hour: number; readonly minute: number }
+        readonly month: number
+        readonly day: number
+      }
+  readonly tzOffsetMin: number
+  readonly prompt: string
+  readonly agent: string | null
+  readonly model: string | null
+  readonly location: string | null
+  readonly permissionMode: string | null
+  readonly enabled: boolean
+  readonly nextFireAt: number | null
+  readonly lastFiredAt: number | null
+  readonly timeCreated: number
+  readonly timeUpdated: number
+}
+
+export type CalendarRemoveScheduleInput = { readonly id: { readonly id: string }["id"] }
+
+export type CalendarRemoveScheduleOutput = void
+
+export type CalendarListFiresOutput = ReadonlyArray<{
+  readonly id: string
+  readonly scheduleId: string
+  readonly occurrenceMillis: number
+  readonly firedAt: number
+  readonly sessionId: string | null
+  readonly status: "spawned" | "skipped" | "error"
+}>
+
+export type RecipesListOutput = ReadonlyArray<{
+  readonly slug: string
+  readonly name: string
+  readonly description?: string | undefined
+  readonly prompt: string
+  readonly assets: ReadonlyArray<string>
+  readonly builtin: boolean
+  readonly updatedAt: number
+}>
+
+export type RecipesGetInput = { readonly slug: { readonly slug: string }["slug"] }
+
+export type RecipesGetOutput = {
+  readonly slug: string
+  readonly name: string
+  readonly description?: string | undefined
+  readonly prompt: string
+  readonly assets: ReadonlyArray<string>
+  readonly builtin: boolean
+  readonly updatedAt: number
+}
+
+export type RecipesSaveInput = {
+  readonly slug?: {
+    readonly slug?: string | undefined
+    readonly name: string
+    readonly description?: string | undefined
+    readonly prompt: string
+  }["slug"]
+  readonly name: {
+    readonly slug?: string | undefined
+    readonly name: string
+    readonly description?: string | undefined
+    readonly prompt: string
+  }["name"]
+  readonly description?: {
+    readonly slug?: string | undefined
+    readonly name: string
+    readonly description?: string | undefined
+    readonly prompt: string
+  }["description"]
+  readonly prompt: {
+    readonly slug?: string | undefined
+    readonly name: string
+    readonly description?: string | undefined
+    readonly prompt: string
+  }["prompt"]
+}
+
+export type RecipesSaveOutput = {
+  readonly slug: string
+  readonly name: string
+  readonly description?: string | undefined
+  readonly prompt: string
+  readonly assets: ReadonlyArray<string>
+  readonly builtin: boolean
+  readonly updatedAt: number
+}
+
+export type RecipesDuplicateInput = { readonly slug: { readonly slug: string }["slug"] }
+
+export type RecipesDuplicateOutput = {
+  readonly slug: string
+  readonly name: string
+  readonly description?: string | undefined
+  readonly prompt: string
+  readonly assets: ReadonlyArray<string>
+  readonly builtin: boolean
+  readonly updatedAt: number
+}
+
+export type RecipesRemoveInput = { readonly slug: { readonly slug: string }["slug"] }
+
+export type RecipesRemoveOutput = void
+
+export type RecipesRunInput = {
+  readonly slug: { readonly slug: string }["slug"]
+  readonly directory?: {
+    readonly directory?: string | null
+    readonly model?: string | null
+    readonly agent?: string | null
+    readonly strict?: { readonly enabled?: boolean; readonly attempts?: number; readonly wallMinutes?: number } | null
+  }["directory"]
+  readonly model?: {
+    readonly directory?: string | null
+    readonly model?: string | null
+    readonly agent?: string | null
+    readonly strict?: { readonly enabled?: boolean; readonly attempts?: number; readonly wallMinutes?: number } | null
+  }["model"]
+  readonly agent?: {
+    readonly directory?: string | null
+    readonly model?: string | null
+    readonly agent?: string | null
+    readonly strict?: { readonly enabled?: boolean; readonly attempts?: number; readonly wallMinutes?: number } | null
+  }["agent"]
+  readonly strict?: {
+    readonly directory?: string | null
+    readonly model?: string | null
+    readonly agent?: string | null
+    readonly strict?: { readonly enabled?: boolean; readonly attempts?: number; readonly wallMinutes?: number } | null
+  }["strict"]
+}
+
+export type RecipesRunOutput = {
+  readonly sessionID: string
+  readonly directory: string
+  readonly assets: ReadonlyArray<string>
+}
 
 export type PermissionsListRequestsInput = {
   readonly location?: {

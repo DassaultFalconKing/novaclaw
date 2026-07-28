@@ -98,6 +98,7 @@ export function createPromptInputController(input: {
           thinkingBudget?: boolean
           surgicalEdits?: boolean
           askBeforeChanges?: boolean
+          completionGuard?: boolean
         }
       | undefined
     const config = sync().data.config as Partial<Record<SessionFeatureName, { enabled?: boolean }>>
@@ -106,7 +107,9 @@ export function createPromptInputController(input: {
       // `thinkingBudget` has no global `{ enabled }` block to fall back on — its instance default IS the
       // model's own budget, which the browser cannot know per-model. Default it ON (enforced) so the
       // control matches the runner's `config.thinkingBudget ?? true`; flipping it writes this chat's off.
-      draft?.[feature] ?? record?.[feature] ?? (feature === "thinkingBudget" ? true : config[feature]?.enabled === true)
+      draft?.[feature] ??
+      record?.[feature] ??
+      (feature === "thinkingBudget" || feature === "completionGuard" ? true : config[feature]?.enabled === true)
     return {
       introspection: pick("introspection"),
       quality: pick("quality"),
@@ -114,6 +117,7 @@ export function createPromptInputController(input: {
       thinkingBudget: pick("thinkingBudget"),
       surgicalEdits: pick("surgicalEdits"),
       askBeforeChanges: pick("askBeforeChanges"),
+      completionGuard: pick("completionGuard"),
     }
   }
 
