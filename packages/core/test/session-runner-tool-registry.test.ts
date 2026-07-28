@@ -62,15 +62,27 @@ describe("ToolRegistry", () => {
   test("returns a bounded deterministic repair for an invented tool name", () => {
     const message = ToolRegistry.unknownToolMessage(
       "invented",
-      Array.from({ length: 14 }, (_, index) => `tool_${String(13 - index).padStart(2, "0")}`),
+      Array.from({ length: 40 }, (_, index) => `advertised_tool_${String(index).padStart(2, "0")}`),
     )
     expect(message).toContain("Unknown tool: invented")
-    expect(message).toContain("Available tools (first 12 of 14): tool_00, tool_01")
-    expect(message).toContain("tool_11")
-    expect(message).not.toContain("tool_12")
-    expect(message).not.toContain("tool_13")
+    expect(message).toContain("Available tools (")
+    expect(message).toContain("advertised_tool_00, advertised_tool_01")
+    expect(message).not.toContain("advertised_tool_39")
     expect(message).toContain("exact advertised names")
     expect(message).toContain("do not invent")
+  })
+
+  test("suggests one cautious near match but stays silent on a tie", () => {
+    expect(ToolRegistry.unknownToolMessage("apply_path", ["read", "apply_patch", "write"])).toContain(
+      "Did you mean `apply_patch`?",
+    )
+    expect(ToolRegistry.unknownToolMessage("tool_c", ["tool_a", "tool_b"])).not.toContain("Did you mean")
+  })
+
+  test("preserves advertised tool order", () => {
+    expect(ToolRegistry.unknownToolMessage("invented", ["write", "read", "bash"])).toContain(
+      "Available tools: write, read, bash",
+    )
   })
 
   test("does not suggest a call when the turn has no advertised tools", () => {
