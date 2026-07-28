@@ -1,5 +1,5 @@
 import { describe, expect } from "bun:test"
-import { DateTime, Deferred, Effect, Fiber, Layer } from "effect"
+import { DateTime, Deferred, Effect, Fiber, Layer, Schema } from "effect"
 import { AgentV2 } from "@novaclaw/core/agent"
 import { Database } from "@novaclaw/core/database/database"
 import { AppNodeBuilder } from "@novaclaw/core/effect/app-node-builder"
@@ -13,7 +13,9 @@ import { PermissionSaved } from "@novaclaw/core/permission/saved"
 import { Project } from "@novaclaw/core/project"
 import { AbsolutePath } from "@novaclaw/core/schema"
 import { SessionV2 } from "@novaclaw/core/session"
-import { SessionTable } from "@novaclaw/core/session/sql"
+import { SessionMessage } from "@novaclaw/core/session/message"
+import { FileAttachment } from "@novaclaw/core/session/prompt"
+import { SessionMessageTable, SessionTable } from "@novaclaw/core/session/sql"
 import { Global } from "@novaclaw/core/global"
 import { SessionStore } from "@novaclaw/core/session/store"
 import { SettingsConfigStore } from "@novaclaw/core/settings-config-store"
@@ -101,6 +103,36 @@ function insertSession(input: {
   })
 }
 
+function insertAttachedMessage(sessionID: SessionV2.ID, text: string, name: string) {
+  return Effect.gen(function* () {
+    const { db } = yield* Database.Service
+    const created = DateTime.makeUnsafe(1)
+    const messageID = SessionMessage.ID.make(`msg_${sessionID}`)
+    const encoded = Schema.encodeSync(SessionMessage.Message)(
+      SessionMessage.User.make({
+        id: messageID,
+        type: "user",
+        text,
+        files: [FileAttachment.make({ uri: "data:text/markdown,task", mime: "text/markdown", name })],
+        time: { created },
+      }),
+    )
+    const { id: _, type, ...data } = encoded
+    yield* db
+      .insert(SessionMessageTable)
+      .values({
+        id: messageID,
+        session_id: sessionID,
+        type,
+        seq: 1,
+        time_created: DateTime.toEpochMillis(created),
+        data,
+      })
+      .run()
+      .pipe(Effect.orDie)
+  })
+}
+
 function assertion(input: Partial<PermissionV2.AssertInput> = {}) {
   return {
     id: PermissionV2.ID.create("per_test"),
@@ -176,6 +208,29 @@ describe("PermissionV2", () => {
       const denied = yield* service.assert(assertion()).pipe(Effect.flip)
       expect(denied).toBeInstanceOf(PermissionV2.DeniedError)
       expect(yield* service.list()).toEqual([])
+    }),
+  )
+
+  it.effect("hard-denies mutation of an attached task source below allow-all rules", () =>
+    Effect.gen(function* () {
+      yield* setup([{ action: "*", resource: "*", effect: "allow" }])
+      const sessionID = SessionV2.ID.make("ses_attachment_source")
+      yield* insertSession({ id: sessionID, permissionMode: "bypass" })
+      yield* insertAttachedMessage(
+        sessionID,
+        "Use the attached document as the task specification. Create result.md.",
+        "task.md",
+      )
+      const service = yield* PermissionV2.Service
+      const denied = yield* service
+        .assert(assertion({ sessionID, action: "edit", resources: ["task.md"] }))
+        .pipe(Effect.flip)
+      expect(denied).toBeInstanceOf(PermissionV2.DeniedError)
+      expect(denied).toMatchObject({ reason: "attachment-source" })
+      expect(PermissionV2.denialMessage(denied)).toContain("Create the requested output file")
+      expect(yield* service.ask(assertion({ sessionID, action: "create", resources: ["result.md"] }))).toMatchObject({
+        effect: "allow",
+      })
     }),
   )
 
