@@ -2656,17 +2656,24 @@ describe("SessionRunnerLLM", () => {
     }),
   )
 
-  it.effect("durably settles local tool failures before continuing", () =>
+  it.effect("guides an invented tool call into advertised execution and completion", () =>
     Effect.gen(function* () {
       yield* setup
       const session = yield* SessionV2.Service
       yield* session.prompt({ sessionID, prompt: Prompt.make({ text: "Call missing" }), resume: false })
 
       requests.length = 0
+      executions.length = 0
       responses = [
         [
           LLMEvent.stepStart({ index: 0 }),
           LLMEvent.toolCall({ id: "call-missing", name: "missing", input: {} }),
+          LLMEvent.stepFinish({ index: 0, reason: "tool-calls" }),
+          LLMEvent.finish({ reason: "tool-calls" }),
+        ],
+        [
+          LLMEvent.stepStart({ index: 0 }),
+          LLMEvent.toolCall({ id: "call-echo-recovery", name: "echo", input: { text: "recovered" } }),
           LLMEvent.stepFinish({ index: 0, reason: "tool-calls" }),
           LLMEvent.finish({ reason: "tool-calls" }),
         ],
@@ -2684,7 +2691,8 @@ describe("SessionRunnerLLM", () => {
 
       yield* session.resume(sessionID)
 
-      expect(requests).toHaveLength(2)
+      expect(requests).toHaveLength(3)
+      expect(executions).toEqual(["recovered"])
       expect(yield* session.context(sessionID)).toMatchObject([
         { type: "user", text: "Call missing" },
         {
@@ -2693,7 +2701,23 @@ describe("SessionRunnerLLM", () => {
             {
               type: "tool",
               id: "call-missing",
-              state: { status: "error", error: { message: "Unknown tool: missing" } },
+              state: {
+                status: "error",
+                error: {
+                  message:
+                    "Unknown tool: missing. Available tools: defect, echo. Use one of these exact advertised names; do not invent a tool or write a call as text.",
+                },
+              },
+            },
+          ],
+        },
+        {
+          type: "assistant",
+          content: [
+            {
+              type: "tool",
+              id: "call-echo-recovery",
+              state: { status: "completed", structured: { text: "recovered" } },
             },
           ],
         },
