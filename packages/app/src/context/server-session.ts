@@ -69,7 +69,8 @@ export function createServerSession(client: NovaclawClient, options?: { retry?: 
     // events + the /api/tag bootstrap. Organization over chats — replaces project grouping.
     tag: {} as Record<string, string[]>,
     session_working(id: string) {
-      return (this.session_status[id]?.type ?? "idle") !== "idle"
+      const type = this.session_status[id]?.type
+      return type === "busy" || type === "retry"
     },
     // Live ~tokens + t/s for a RUNNING agent (undefined when nothing is streaming). Reads the
     // throttled version signal, so a Chats row re-renders at the throttle cadence, not per delta.
