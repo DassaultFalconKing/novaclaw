@@ -1,6 +1,10 @@
 import { describe, expect, test } from "bun:test"
+import { DateTime } from "effect"
 import { PermissionV2 } from "./permission"
 import { LocationMutation } from "./location-mutation"
+import { SessionMessage } from "./session/message"
+import { FileAttachment } from "./session/prompt"
+import { applySteerProvenance } from "./session/steer-provenance"
 
 // 1I + 1J pure-logic coverage: the split action granularity (read-class external access never
 // authorizes write-class) and the denial-as-observation message lowering.
@@ -76,6 +80,20 @@ describe("denialMessage — denial as observation (1J)", () => {
     expect(message).not.toContain("UNATTENDED")
   })
 
+  test("an attachment-source denial redirects the model to a verified output file", () => {
+    const message = PermissionV2.denialMessage(
+      new PermissionV2.DeniedError({
+        rules: [{ action: "edit", resource: "task.md", effect: "deny" }],
+        reason: "attachment-source",
+      }),
+    )!
+    expect(message).toContain("attached task input")
+    expect(message).toContain("read-only")
+    expect(message).toContain("Create the requested output file")
+    expect(message).toContain("read that output back")
+    expect(message).not.toContain("ask the user")
+  })
+
   test("CorrectedError carries the user's reason verbatim", () => {
     const message = PermissionV2.denialMessage(
       new PermissionV2.CorrectedError({ feedback: "w64devkit is a read-only toolchain — write under the project" }),
@@ -94,5 +112,53 @@ describe("denialMessage — denial as observation (1J)", () => {
     expect(PermissionV2.denialMessage(new Error("ENOENT"))).toBeUndefined()
     expect(PermissionV2.denialMessage("string")).toBeUndefined()
     expect(PermissionV2.denialMessage(undefined)).toBeUndefined()
+  })
+})
+
+const attachedUser = (text: string, name = "task.md", id = "msg_attached") =>
+  SessionMessage.User.make({
+    id: SessionMessage.ID.make(id),
+    type: "user",
+    text,
+    files: [FileAttachment.make({ uri: "data:text/markdown,task", mime: "text/markdown", name })],
+    time: { created: DateTime.makeUnsafe(1) },
+  })
+
+const plainUser = (text: string, id = "msg_followup") =>
+  SessionMessage.User.make({
+    id: SessionMessage.ID.make(id),
+    type: "user",
+    text,
+    time: { created: DateTime.makeUnsafe(2) },
+  })
+
+describe("protectedAttachmentResource — immutable task input", () => {
+  test("blocks edit, overwrite, and trash of an attached specification", () => {
+    const messages = [attachedUser("Use the attached document as the task specification.")]
+    expect(PermissionV2.protectedAttachmentResource(messages, "edit", ["task.md"])).toBe("task.md")
+    expect(PermissionV2.protectedAttachmentResource(messages, "write", ["/project/task.md"])).toBe("/project/task.md")
+    expect(PermissionV2.protectedAttachmentResource(messages, "trash", [".\\task.md"])).toBe(".\\task.md")
+  })
+
+  test("does not block reading the attachment or writing a different output", () => {
+    const messages = [attachedUser("Use the attached document as the task specification.")]
+    expect(PermissionV2.protectedAttachmentResource(messages, "read", ["task.md"])).toBeUndefined()
+    expect(PermissionV2.protectedAttachmentResource(messages, "write", ["result.md"])).toBeUndefined()
+  })
+
+  test("allows a trusted follow-up that explicitly names the attachment as the edit target", () => {
+    const messages = [
+      attachedUser("Review this task."),
+      plainUser("Please fix and rewrite task.md itself.", "msg_authorize"),
+    ]
+    expect(PermissionV2.protectedAttachmentResource(messages, "edit", ["task.md"])).toBeUndefined()
+  })
+
+  test("does not treat a negated edit or an automated steer as authorization", () => {
+    const negated = [attachedUser("Do not edit task.md; create result.md instead.")]
+    expect(PermissionV2.protectedAttachmentResource(negated, "edit", ["task.md"])).toBe("task.md")
+
+    const steer = [attachedUser("Review this task."), plainUser(applySteerProvenance("Edit task.md now."), "msg_steer")]
+    expect(PermissionV2.protectedAttachmentResource(steer, "edit", ["task.md"])).toBe("task.md")
   })
 })
