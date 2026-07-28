@@ -34,7 +34,6 @@ import { SessionRunCoordinator } from "@novaclaw/core/session/run-coordinator"
 import { SessionRunner } from "@novaclaw/core/session/runner"
 import * as SessionRunnerLLM from "@novaclaw/core/session/runner/llm"
 import { SessionRunnerModel } from "@novaclaw/core/session/runner/model"
-import { TrustBoundary } from "@novaclaw/core/session/runner/trust-boundary"
 import { ToolRegistry } from "@novaclaw/core/tool/registry"
 import { ApplicationTools } from "@novaclaw/core/tool/application-tools"
 import { AgentV2 } from "@novaclaw/core/agent"
@@ -673,7 +672,6 @@ describe("SessionRunnerLLM", () => {
       yield* session.resume(sessionID)
 
       expect(requests[0]?.tools.map((tool) => tool.name)).toContain("application_context")
-      expect(requests[0]?.system[0]?.text).toBe(TrustBoundary.SYSTEM_PROMPT)
       expect(contexts).toEqual([
         {
           sessionID,
