@@ -279,7 +279,9 @@ describe("ToolRegistry", () => {
         ...identity,
         call: { type: "tool-call", id: "call-context", name: "context", input: {} },
       })
-      expect(contexts).toEqual([{ sessionID, ...identity, toolCallID: "call-context" }])
+      expect(contexts).toEqual([
+        { sessionID, ...identity, toolCallID: "call-context", attachmentPaths: new Set() },
+      ])
     }),
   )
 
