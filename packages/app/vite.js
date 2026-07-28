@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs"
 import solidPlugin from "vite-plugin-solid"
 import tailwindcss from "@tailwindcss/vite"
 import { fileURLToPath } from "url"
+import { frontendChunk, frontendChunkBudget } from "./frontend-chunks.js"
 
 const theme = fileURLToPath(new URL("./public/oc-theme-preload.js", import.meta.url))
 
@@ -30,6 +31,14 @@ export default [
         },
         worker: {
           format: "es",
+        },
+        build: {
+          chunkSizeWarningLimit: frontendChunkBudget.assetBytes / 1000,
+          rollupOptions: {
+            output: {
+              manualChunks: frontendChunk,
+            },
+          },
         },
       }
     },
