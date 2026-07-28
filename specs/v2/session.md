@@ -51,6 +51,19 @@ The local runner issues one explicit `llm.stream(request)` per provider turn, pr
 
 Projected hosted tools preserve call-side and settlement-side provider metadata separately so settlement and interruption recovery cannot erase continuation identifiers. Provider-native reasoning and provider metadata replay only while the historical assistant model matches the selected continuation model; after a model switch, visible reasoning text remains ordinary assistant text and provider-native metadata is omitted.
 
+## Premature-Stop Contract
+
+`auto-prompting` and `goal-oriented` sessions do not treat a text-only final answer as completion. The runner self-prompts until `exit(result)`, Stop, 24 rounds, or 45 minutes. Strict mode further moves progress control into the harness: atomic actions, verification gates, and recovery. This works serially with a one-slot local provider; keep Strict racing at one.
+
+This reduces horizon failures but is not a completion guarantee:
+
+| Residual stop | Maintainer mitigation |
+| --- | --- |
+| Model calls `exit()` too early | Prefer Strict. For normal self-drive, add a two-phase exit gate: validate explicit acceptance criteria and steer on failure before persisting `result`. |
+| No mechanical completion check | Supply a task-specific `taskComplete` oracle. Otherwise use `verifyGoal` plus evidence and report subjective results as unverified, not mechanically complete. |
+| Round or wall-clock cap expires | Preserve checkpoints, expose the cap notice, and resume explicitly. Set `strict.wallMinutes` from the task budget; do not silently disable the watchdog. |
+| Context overflow or truncated generation | Keep steps atomic, compact before pressure, and use separate, adequately sized reasoning/execution budgets. Retain empty-turn recovery, but surface repeated truncation as a provider/configuration fault. |
+
 ## Context Epochs
 
 V2 Sessions persist the exact privileged System Context shown to the model. A Context Epoch stores one immutable provider-cache baseline and a model-hidden structured snapshot used to compare independently observed Context Sources. Environment facts, the host-local date, ambient global/upward-project `AGENTS.md` files, and selected-agent available-skill guidance are the initial sources. Location-wide sources come from the System Context Registry; selected-agent guidance composes with them immediately before Context Epoch admission.
