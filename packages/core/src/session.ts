@@ -146,7 +146,6 @@ type CreateInput = {
   introspection?: boolean
   quality?: boolean
   affective?: boolean
-  completionGuard?: boolean
   location: Location.Ref
   // F1c fork: a fork seeds its record from the source (title + cloned metadata).
   title?: string
@@ -247,14 +246,7 @@ export interface Interface {
   }) => Effect.Effect<void, NotFoundError>
   readonly switchFeature: (input: {
     sessionID: SessionSchema.ID
-    feature:
-      | "introspection"
-      | "quality"
-      | "affective"
-      | "thinkingBudget"
-      | "surgicalEdits"
-      | "askBeforeChanges"
-      | "completionGuard"
+    feature: "introspection" | "quality" | "affective" | "thinkingBudget" | "surgicalEdits" | "askBeforeChanges"
     enabled: boolean | null
   }) => Effect.Effect<void, NotFoundError>
   readonly switchType: (input: {
@@ -376,7 +368,6 @@ export const createSessionRecord = (
       introspection: input.introspection,
       quality: input.quality,
       affective: input.affective,
-      completionGuard: input.completionGuard,
       cost: 0,
       tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
       time: { created: DateTime.makeUnsafe(now), updated: DateTime.makeUnsafe(now) },
@@ -953,7 +944,6 @@ export const layer = Layer.effect(
             introspection: source.introspection,
             quality: source.quality,
             affective: source.affective,
-            completionGuard: source.completionGuard,
           },
         )
         const sourceRows = yield* db

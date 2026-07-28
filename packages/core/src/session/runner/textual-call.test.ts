@@ -12,7 +12,7 @@ describe("detect — the turns that actually shipped a silent no-op", () => {
       "",
       "**Step 1: Initial searches**",
       "",
-      "```bash",
+      '```bash',
       `bash -c "echo 'Starting LNR/DNR influencer research'"`,
       "```",
     ].join("\n")
@@ -61,6 +61,11 @@ describe("detect — the turns that actually shipped a silent no-op", () => {
 
   test("detects a Russian first-person tool commitment", () => {
     expect(TextualCall.detect("Сейчас вызову write, затем проверю результат.", TOOLS)?.tell).toBe("promised-tool")
+  })
+
+  test("a precise fenced call wins over a prose promise", () => {
+    const text = "I'll call bash now.\n\n```bash\nbun test\n```"
+    expect(TextualCall.detect(text, TOOLS)?.tell).toBe("fenced-tool")
   })
 })
 
@@ -115,7 +120,6 @@ describe("recoveryMessage", () => {
     // The escape hatch matters: a legitimate illustration must be able to end the turn honestly.
     expect(message).toContain("only an illustration")
   })
-
   test("an unfulfilled promise says that describing a call did not run it", () => {
     const message = TextualCall.recoveryMessage({
       tell: "promised-tool",
@@ -124,13 +128,5 @@ describe("recoveryMessage", () => {
     expect(message).toContain("said you were about to perform one")
     expect(message).toContain("promising")
     expect(message).toContain("nothing happened")
-  })
-})
-
-describe("detectWhenEnabled", () => {
-  test("the Completion guard switch disables textual-call recovery without executing the text", () => {
-    const text = "```bash\npwd\n```"
-    expect(TextualCall.detectWhenEnabled(true, text, TOOLS)?.tell).toBe("fenced-tool")
-    expect(TextualCall.detectWhenEnabled(false, text, TOOLS)).toBeUndefined()
   })
 })

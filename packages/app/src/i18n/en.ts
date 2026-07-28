@@ -433,9 +433,6 @@ export const dict = {
   "prompt.features.quality.title": "Quality gates",
   "prompt.features.quality.description":
     "Compiles and tests after the agent edits code, and steers it to fix failures before finishing.",
-  "prompt.features.completionGuard.title": "Completion guard",
-  "prompt.features.completionGuard.description":
-    "Catches tool calls written as text, retries one truncated response, and asks unattended agents to prove completion before exiting.",
   "prompt.features.affective.title": "Mood sampling",
   "prompt.features.affective.description":
     "Adapts the model's sampling to its appraised mood — steadier when frustrated, freer when exploring.",

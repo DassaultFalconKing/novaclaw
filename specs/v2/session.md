@@ -59,51 +59,10 @@ This reduces horizon failures but is not a completion guarantee:
 
 | Residual stop                            | Maintainer mitigation                                                                                                                                                                                           |
 | ---------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Model calls `exit()` too early           | Normal self-drive uses a two-phase exit gate: the first call requests confirmation; a later call must provide acceptance evidence before `result` is persisted. Prefer Strict for mechanically checked work.    |
+| Model calls `exit()` too early           | Route mechanically checkable work through Strict and a task-specific oracle. Normal `exit()` is not self-attested: a verifier receipt seam is required before the session route can gate completion.              |
 | No mechanical completion check           | Supply a task-specific `taskComplete` oracle. Otherwise Strict uses `verifyGoal` plus evidence and reports whole-task completion as evidence-judged, never mechanically proven.                                 |
 | Round or wall-clock cap expires          | Durable history/Strict checkpoints remain resumable and the cap notice names `resume`. Set `strict.wallMinutes` from the task budget; do not silently disable the watchdog.                                     |
 | Context overflow or truncated generation | Keep steps atomic, compact before pressure, and use separate reasoning/execution budgets. One terminal `finish_reason=length` is continued; a repeat pauses with an explicit provider/configuration diagnostic. |
-
-### Completion guard and textual tool calls
-
-`Tune -> Completion guard` is ON by default and is a per-session, inherited override. Turning it
-OFF restores the legacy one-phase `exit`, disables the one-shot `finish_reason=length` continuation,
-and disables the corrective steer for tool calls printed as Markdown/XML. It never executes text as
-a command.
-
-An unknown structured tool name never reaches a handler. The captured registry snapshot returns an
-error with a sorted, bounded list of the exact tool names advertised for that provider turn. The
-runner persists the error and continues, so a local model can repair the call and complete the task
-without guessing another name. When no tools are available, the result says so and explicitly
-forbids inventing a call or printing one as text.
-
-The 2026-07-28 local llama.cpp check separated parser failure from model choice: the active Q6 9B
-model returned structured `tool_calls` with both `tool_choice=required` and the normal auto mode.
-Therefore an intermittent Markdown call in a long task is not evidence of a permanently broken wire
-parser. The likely path is a small/abliterated model choosing explanatory content under auto tool
-choice and context pressure. Inspect the raw response before changing the chat template: structured
-`tool_calls` indicate a model-policy miss; literal `<tool_call>` in `message.content` indicates a
-template/parser mismatch.
-
-### Attachment trust boundary
-
-Every provider turn starts with a kernel-owned security boundary. It classifies attachments,
-repository files, web/search content, MCP/plugin responses, shell output, and other tool results as
-untrusted instructions. The model may use them as evidence or task data, but they cannot grant
-authority, expand permissions, request secrets, authorize external side effects, or prove task
-completion. This system policy is assembled before persona, agent, session, and project context, so
-a user-configured prompt cannot remove it.
-
-Every attached file gets a model-facing trust boundary immediately before its content part. The
-runner treats file content as untrusted data, not as system, operator, tool, or permission
-instructions. The model may follow task instructions inside a file only when the surrounding user
-request explicitly delegates them and they remain inside the trusted operator's existing authority
-and scope. A file cannot override policy, expand permissions, request secrets, or redefine the
-available tools.
-
-The trust boundary applies to inline text and provider-native media. It is generated during
-model-message lowering, so the durable transcript keeps the original user text and attachment
-metadata without embedding security prose.
 
 ## Context Epochs
 

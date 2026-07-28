@@ -555,6 +555,7 @@ export const dict = {
   "session.share.copy.copied": "Скопировано",
   "session.share.copy.copyLink": "Копировать ссылку",
 
+
   "prompt.loading": "Загрузка запроса...",
   "terminal.loading": "Загрузка терминала...",
   "terminal.title": "Терминал",
@@ -899,7 +900,4 @@ export const dict = {
   "error.childStore.persistedProjectIconCreateFailed": "Не удалось создать постоянный значок проекта",
   "error.childStore.storeCreateFailed": "Не удалось создать хранилище",
   "terminal.connectionLost.abnormalClose": "WebSocket закрыт аварийно: {{code}}",
-  "prompt.features.completionGuard.title": "Защита завершения",
-  "prompt.features.completionGuard.description":
-    "Распознаёт вызовы инструментов, напечатанные как текст, продолжает один усечённый ответ и просит автономного агента подтвердить завершение перед выходом.",
 }

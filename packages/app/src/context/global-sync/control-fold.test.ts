@@ -33,15 +33,6 @@ describe("controlPatch", () => {
       controlPatch(envelope("session.next.feature.switched", { sessionID: "s", feature: "quality", enabled: true })),
     ).toEqual({ sessionID: "s", patch: { quality: true } })
     expect(
-      controlPatch(
-        envelope("session.next.feature.switched", {
-          sessionID: "s",
-          feature: "completionGuard",
-          enabled: false,
-        }),
-      ),
-    ).toEqual({ sessionID: "s", patch: { completionGuard: false } })
-    expect(
       controlPatch(envelope("session.next.prompt-override.switched", { sessionID: "s", override: "be brief" })),
     ).toEqual({ sessionID: "s", patch: { systemPromptOverride: "be brief" } })
     expect(

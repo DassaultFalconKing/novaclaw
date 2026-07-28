@@ -50,10 +50,10 @@ const repeatedBlock = (text: string): string | undefined => {
   return undefined
 }
 
-// A weak local model can finish immediately after narrating the call it intends to make. This is
-// distinct from a fenced pseudo-call: there is no syntax to parse, only an explicit first-person
-// commitment such as "I'll start by calling write". The runner invokes this detector only after a
-// no-tool-call turn, so a real call in the same response cannot trip it.
+// A weak local model can finish immediately after narrating the call it intends to make. This
+// fallback intentionally recognizes English and Russian only. Do not grow a language dictionary
+// here: a structured no-op signal is the general solution. Check this prose heuristic last so a
+// precise syntactic tell wins when a response contains both.
 const promisedTool = (text: string): string | undefined => {
   const promise =
     /\b(?:I(?:'|’)?ll|I\s+will|I(?:'|’)?m\s+going\s+to|let\s+me)\s+(?:now\s+)?(?:start\s+by\s+|begin\s+by\s+|proceed\s+to\s+)?(?:call(?:ing)?|invok(?:e|ing)|us(?:e|ing)|run(?:ning)?|execut(?:e|ing)|apply(?:ing)?|writ(?:e|ing)|read(?:ing)?|creat(?:e|ing)|edit(?:ing)?|defin(?:e|ing))\b/i.exec(
@@ -105,13 +105,6 @@ export const detect = (text: string, toolNames: ReadonlyArray<string>): TextualC
 
   return undefined
 }
-
-/** Per-session A/B seam for the composer's Completion guard switch. */
-export const detectWhenEnabled = (
-  enabled: boolean,
-  text: string,
-  toolNames: ReadonlyArray<string>,
-): TextualCall | undefined => (enabled ? detect(text, toolNames) : undefined)
 
 /** The corrective steer. Names the mistake, demands a real call, and leaves an honest way out. */
 export const recoveryMessage = (found: TextualCall): string =>

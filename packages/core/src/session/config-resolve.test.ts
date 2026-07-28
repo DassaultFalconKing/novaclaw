@@ -67,13 +67,11 @@ describe("resolveConfig — simple fields (undefined = inherit)", () => {
     // The child's own stance wins — including an explicit FALSE over a parent's true.
     expect(resolveConfig(DEFAULTS, [{ quality: true }, { quality: false }]).quality).toBe(false)
     expect(resolveConfig(DEFAULTS, [{ affective: true }, { affective: false }]).affective).toBe(false)
-    expect(resolveConfig(DEFAULTS, [{ completionGuard: false }, {}]).completionGuard).toBe(false)
-    expect(resolveConfig(DEFAULTS, [{ completionGuard: false }, { completionGuard: true }]).completionGuard).toBe(true)
   })
 
   test("feature toggles flow through the effectful walk (session rows carry them)", () => {
     const sessions: Record<string, SessionLike> = {
-      root: { id: "root", quality: true, introspection: true, affective: true, completionGuard: false },
+      root: { id: "root", quality: true, introspection: true, affective: true },
       child: { id: "child", parentID: "root", introspection: false },
     }
     const resolved = Effect.runSync(
@@ -82,7 +80,6 @@ describe("resolveConfig — simple fields (undefined = inherit)", () => {
     expect(resolved.quality).toBe(true) // inherited
     expect(resolved.affective).toBe(true) // inherited
     expect(resolved.introspection).toBe(false) // the child's explicit off wins
-    expect(resolved.completionGuard).toBe(false)
   })
 
   // The thinking-budget override (the composer's Tuning switch). Tri-state like the other features, with

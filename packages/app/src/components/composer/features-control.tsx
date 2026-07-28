@@ -6,14 +6,7 @@ import { Switch as SwitchToggle } from "@novaclaw/ui/v2/switch-v2"
 import { TooltipV2 } from "@novaclaw/ui/v2/tooltip-v2"
 import { useLanguage } from "@/context/language"
 
-export type ComposerFeature =
-  | "introspection"
-  | "quality"
-  | "affective"
-  | "thinkingBudget"
-  | "surgicalEdits"
-  | "askBeforeChanges"
-  | "completionGuard"
+export type ComposerFeature = "introspection" | "quality" | "affective" | "thinkingBudget" | "surgicalEdits" | "askBeforeChanges"
 export type ComposerMode = "interactive" | "auto-prompting" | "goal-oriented"
 
 // The Remote-chat section (messenger-plan §6.2): where does THIS chat live remotely? The trust
@@ -70,7 +63,6 @@ export type ComposerFeaturesControlState = {
 // budget values. The per-session plumbing (event, column, config walk) is left in place and inert — it costs
 // nothing, and ripping a column out of shipped sessions buys nothing at this point.
 const COMPOSER_FEATURES: readonly ComposerFeature[] = [
-  "completionGuard",
   "askBeforeChanges",
   "surgicalEdits",
   "introspection",
