@@ -62,6 +62,11 @@ describe("detect — the turns that actually shipped a silent no-op", () => {
   test("detects a Russian first-person tool commitment", () => {
     expect(TextualCall.detect("Сейчас вызову write, затем проверю результат.", TOOLS)?.tell).toBe("promised-tool")
   })
+
+  test("a precise fenced call wins over a prose promise", () => {
+    const text = "I'll call bash now.\n\n```bash\nbun test\n```"
+    expect(TextualCall.detect(text, TOOLS)?.tell).toBe("fenced-tool")
+  })
 })
 
 describe("detect — negatives (a false positive costs a wasted steer, so pin them)", () => {
