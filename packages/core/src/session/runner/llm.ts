@@ -1672,13 +1672,11 @@ export const layer = Layer.effect(
             }
           }
           const context = yield* getContext(input.sessionID)
-          if (result.finishReason !== "length") finishRecovery.recoveries = 0
           const finishDecision = FinishRecovery.decide(result.finishReason, result.needsContinuation, finishRecovery)
           // 1E doom-loop break: only while the model is still acting (made a tool call).
           // If its last few tool calls are byte-identical, inject a one-shot redirect as a
           // steer so the next turn is nudged to change approach.
           if (finishDecision.kind === "continue") {
-            finishRecovery.recoveries++
             yield* Effect.logInfo("provider length recovery", {
               sessionID: input.sessionID,
               recovery: finishRecovery.recoveries,

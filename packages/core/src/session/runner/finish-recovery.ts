@@ -15,7 +15,8 @@ export const initialState = (): State => ({ recoveries: 0 })
 
 export function decide(reason: FinishReason | undefined, needsContinuation: boolean, state: State): Decision {
   if (reason !== "length" || needsContinuation) return { kind: "none" }
-  if (state.recoveries === 0)
+  state.recoveries++
+  if (state.recoveries === 1)
     return {
       kind: "continue",
       message:
