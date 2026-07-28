@@ -93,6 +93,7 @@ import { MAX_STEPS_PROMPT } from "./max-steps"
 import { ReasoningBudget } from "./reasoning-budget"
 import { ProviderRetry } from "./provider-retry"
 import { FinishRecovery } from "./finish-recovery"
+import { TrustBoundary } from "./trust-boundary"
 import { Quality } from "./quality"
 import { QualityProvision } from "./quality-provision"
 import { Snapshot } from "../../snapshot"
@@ -765,6 +766,7 @@ export const layer = Layer.effect(
         model,
         providerOptions: { openai: { promptCacheKey } },
         system: [
+          TrustBoundary.SYSTEM_PROMPT,
           personaBaseline,
           expertiseHint,
           tierHint,
