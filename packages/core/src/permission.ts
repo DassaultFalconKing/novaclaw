@@ -9,9 +9,7 @@ import { EventV2 } from "./event"
 import { Location } from "./location"
 import { AgentV2 } from "./agent"
 import { SessionV2 } from "./session"
-import { SessionMessage } from "./session/message"
 import { SessionStore } from "./session/store"
-import { isSteerText } from "./session/steer-provenance"
 import { Wildcard } from "./util/wildcard"
 import {
   EFFECTIVE_CONFIG_DEFAULTS,
@@ -57,6 +55,10 @@ export const AssertInput = Schema.Struct({
   id: ID.pipe(Schema.optional),
   ...RequestFields,
   agent: AgentV2.ID.pipe(Schema.optional),
+  /** Canonical attachment identities captured once for the provider turn. */
+  attachmentPaths: Schema.Array(Schema.String).pipe(Schema.optional),
+  /** Canonical mutation targets aligned with `resources`. */
+  targetPaths: Schema.Array(Schema.String).pipe(Schema.optional),
 }).annotate({ identifier: "PermissionV2.AssertInput" })
 export type AssertInput = typeof AssertInput.Type
 
@@ -87,7 +89,7 @@ export class CorrectedError extends Schema.TaggedErrorClass<CorrectedError>()("P
  * (`config-resolve.ts` → `UNATTENDED_CONFINED_RULES`); the generic wording tells the model to "ask
  * the user to adjust permissions", which is exactly the advice that hangs an unattended run.
  */
-export const DenialReason = Schema.Literals(["unattended-confined", "attachment-source"])
+export const DenialReason = Schema.Literal("unattended-confined")
 export type DenialReason = typeof DenialReason.Type
 
 export class DeniedError extends Schema.TaggedErrorClass<DeniedError>()("PermissionV2.DeniedError", {
@@ -123,13 +125,6 @@ export function denialMessage(error: unknown): string | undefined {
         `whatever files and subfolders you need. If something outside is genuinely required, finish what you ` +
         `can and name the blocked path in your result.`
       )
-    if (error.reason === "attachment-source")
-      return (
-        `Permission denied: this file is an attached task input and is read-only for this turn. ` +
-        `Do not modify or delete the specification, and do not retry the same call. Create the requested ` +
-        `output file instead, then read that output back to verify it. Only a trusted user request that ` +
-        `explicitly names this attached file as the edit target can authorize changing it.`
-      )
     return `Permission denied by policy: action '${actions}' on '${resources}' is not allowed in this mode. Do not retry the same call — work within permitted paths and actions, or ask the user to adjust permissions.`
   }
   if (error instanceof CorrectedError)
@@ -143,65 +138,20 @@ export type ReplyVerdict = "allow" | "deny"
 export type ReplyScope = "once" | "file" | "always"
 
 const MUTATING_ACTIONS = new Set(["edit", "write", "trash"])
-const MUTATION_WORD =
-  /\b(edit|update|modify|rewrite|overwrite|replace|delete|remove|trash|rename|fix|correct|translate|format|change)\b|(?:исправ|измен|обнов|перезап|замен|удал|переимен|перевед|формат)/i
-const NEGATED_MUTATION =
-  /(?:\b(?:do\s+not|don't|never|must\s+not|without)\b|(?:^|\s)не\s+)(?:[\s\S]{0,48})(?:\b(?:edit|update|modify|rewrite|overwrite|replace|delete|remove|trash|rename|fix|correct|translate|format|change)\b|(?:исправ|измен|обнов|перезап|замен|удал|переимен|перевед|формат))/i
-
-const trustedUser = (message: SessionMessage.Message): message is SessionMessage.User =>
-  message.type === "user" &&
-  !isSteerText(message.text) &&
-  (message.origin === undefined || (message.origin.via === "messenger" && message.origin.trust === "operator"))
-
-const normalizedResource = (value: string) =>
-  value
-    .replaceAll("\\", "/")
-    .replace(/^\.\/+/, "")
-    .replace(/\/+/g, "/")
-    .toLocaleLowerCase()
-
-const resourceTargetsAttachment = (resource: string, name: string) => {
-  const target = normalizedResource(resource)
-  const attached = normalizedResource(name)
-  return target === attached || target.endsWith(`/${attached}`)
-}
-
-const explicitlyAuthorizesMutation = (text: string, name: string) => {
-  const lower = text.toLocaleLowerCase()
-  const needle = name.toLocaleLowerCase()
-  for (let offset = lower.indexOf(needle); offset !== -1; offset = lower.indexOf(needle, offset + needle.length)) {
-    const window = text.slice(Math.max(0, offset - 96), Math.min(text.length, offset + needle.length + 96))
-    if (MUTATION_WORD.test(window) && !NEGATED_MUTATION.test(window)) return true
-  }
-  return false
-}
 
 /**
- * Treat prompt attachments as immutable task inputs unless a trusted user explicitly names one as
- * the mutation target. This is enforced below the model and survives weak-model prompt injection.
+ * Return the canonical attachment targeted by this mutation. Paths are already resolved by
+ * LocationMutation, so basename collisions, symlink aliases, `..`, and URI escaping cannot bypass
+ * the comparison. Linux path matching intentionally remains case-sensitive.
  */
-export function protectedAttachmentResource(
-  messages: readonly SessionMessage.Message[],
+export function protectedAttachmentPath(
   action: string,
-  resources: readonly string[],
+  targetPaths: readonly string[],
+  attachmentPaths: readonly string[],
 ): string | undefined {
   if (!MUTATING_ACTIONS.has(action)) return undefined
-  return resources.find((resource) => {
-    const index = messages.findLastIndex(
-      (message) =>
-        trustedUser(message) &&
-        message.files?.some((file) => file.name && resourceTargetsAttachment(resource, file.name)) === true,
-    )
-    if (index === -1) return false
-    const message = messages[index]!
-    if (!trustedUser(message)) return false
-    const name = message.files?.find((file) => file.name && resourceTargetsAttachment(resource, file.name))?.name
-    if (!name) return false
-    return !messages
-      .slice(index)
-      .filter(trustedUser)
-      .some((candidate) => explicitlyAuthorizesMutation(candidate.text, name))
-  })
+  const protectedPaths = new Set(attachmentPaths)
+  return targetPaths.find((target) => protectedPaths.has(target))
 }
 
 /** 1K: normalize the six verdict-scope replies (+ the legacy trio) into {verdict, scope}. */
@@ -400,18 +350,6 @@ export const layer = Layer.effect(
     })
 
     const evaluateInput = EffectRuntime.fnUntraced(function* (input: AssertInput) {
-      const protectedResource = MUTATING_ACTIONS.has(input.action)
-        ? yield* sessions.context(input.sessionID).pipe(
-            EffectRuntime.map((messages) => protectedAttachmentResource(messages, input.action, input.resources)),
-            EffectRuntime.catch(() => EffectRuntime.succeed(undefined)),
-          )
-        : undefined
-      if (protectedResource)
-        return {
-          effect: "deny" as const,
-          rules: [{ action: input.action, resource: protectedResource, effect: "deny" as const }],
-          reason: "attachment-source" as DenialReason | undefined,
-        }
       // 1K: the session's resolved permission MODE contributes a rule overlay. Appended after the
       // agent's configured rules (last-match-wins) so the user's explicit mode outranks agent
       // defaults. The early hard-deny check runs over the configured chain and the mode overlay
@@ -513,20 +451,38 @@ export const layer = Layer.effect(
         return { effect: "deny" as const, rules, reason: "unattended-confined" as DenialReason | undefined }
       if (denied(input, configuredRules) || denied(input, modeRules) || denied(input, featureRules))
         return { effect: "deny" as const, rules, reason: undefined as DenialReason | undefined }
-      const all = [...rules, ...(yield* savedRules())]
+      const protectedPath = protectedAttachmentPath(
+        input.action,
+        input.targetPaths ?? [],
+        input.attachmentPaths ?? [],
+      )
+      const protectedResource =
+        protectedPath === undefined
+          ? undefined
+          : input.resources[input.targetPaths?.findIndex((target) => target === protectedPath) ?? -1]
+      // Attachment protection participates in the normal rule chain. It raises the default to ASK,
+      // while an explicit saved answer can still allow or deny the exact permission resource.
+      const attachmentRules: Permission.Ruleset =
+        protectedResource === undefined
+          ? []
+          : [{ action: input.action, resource: protectedResource, effect: "ask" }]
+      const all = [...rules, ...attachmentRules, ...(yield* savedRules())]
       const effects = input.resources.map((resource) => evaluate(input.action, resource, all).effect)
       const effect: Permission.Effect = effects.includes("deny") ? "deny" : effects.includes("ask") ? "ask" : "allow"
-      return { effect, rules: all, reason: undefined as DenialReason | undefined }
+      return { effect, rules: all, reason: undefined as DenialReason | undefined, protectedPath }
     })
 
-    function request(input: AssertInput): Request {
+    function request(input: AssertInput, protectedPath?: string): Request {
       return {
         id: input.id ?? ID.create(),
         sessionID: input.sessionID,
         action: input.action,
         resources: input.resources,
         save: input.save,
-        metadata: input.metadata,
+        metadata:
+          protectedPath === undefined
+            ? input.metadata
+            : { ...input.metadata, attachmentProtection: true, attachmentPath: protectedPath },
         source: input.source,
       }
     }
@@ -547,7 +503,7 @@ export const layer = Layer.effect(
 
     const ask = EffectRuntime.fn("PermissionV2.ask")(function* (input: AssertInput) {
       const result = yield* evaluateInput(input)
-      const value = request(input)
+      const value = request(input, result.protectedPath)
       if (result.effect === "ask") yield* create(value, input.agent)
       return { id: value.id, effect: result.effect }
     })
@@ -563,7 +519,7 @@ export const layer = Layer.effect(
             })
           }
           if (result.effect === "allow") return
-          const item = yield* create(request(input), input.agent)
+          const item = yield* create(request(input, result.protectedPath), input.agent)
           return yield* restore(Deferred.await(item.deferred)).pipe(
             EffectRuntime.ensuring(
               EffectRuntime.sync(() => {
