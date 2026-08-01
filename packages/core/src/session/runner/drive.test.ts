@@ -67,6 +67,7 @@ describe("SessionDrive.decide", () => {
     expect(decision.kind).toBe("continue")
     if (decision.kind === "continue") {
       expect(decision.message).toContain("parent Session")
+      expect(decision.message).toContain("follow-up")
       expect(decision.message).toContain("`exit`")
     }
   })

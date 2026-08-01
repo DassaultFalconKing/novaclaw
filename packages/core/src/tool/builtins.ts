@@ -28,6 +28,7 @@ import { TrashTool } from "./trash"
 import { WebFetchTool } from "./webfetch"
 import { WebSearchTool } from "./websearch"
 import { SpawnTool } from "./spawn"
+import { SendTool } from "./send"
 import { ExitTool } from "./exit"
 import { WaitTool } from "./wait"
 import { WriteTool } from "./write"
@@ -73,6 +74,7 @@ export const locationLayer = Layer.mergeAll(
   WriteTool.layer,
   WriteHexTool.layer,
   SpawnTool.layer,
+  SendTool.layer,
   ExitTool.layer,
   WaitTool.layer,
 )
@@ -107,6 +109,7 @@ export const node = makeLocationNode({
     WriteTool.node,
     WriteHexTool.node,
     SpawnTool.node,
+    SendTool.node,
     ExitTool.node,
     WaitTool.node,
   ],

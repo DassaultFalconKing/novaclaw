@@ -71,8 +71,8 @@ const GOAL_CONTINUE =
   "that summary is simply your answer. Calling `exit` is how this session ends."
 
 const SUB_AGENT_CONTINUE =
-  "You are a background sub-agent — your parent Session is waiting for a result and will not send another " +
-  "message. Continue the opening task now. When it is genuinely complete (or you can prove it is blocked), " +
+  "You are a background sub-agent — your parent Session is waiting for a result and may send durable follow-up " +
+  "messages. Continue the task using any newly received context. When it is genuinely complete (or you can prove it is blocked), " +
   "call the `exit` tool with a concise result summary; that durable result is how your parent receives the work."
 
 const capNotice = (reason: string) =>
