@@ -174,6 +174,9 @@ export function update(adapter: Adapter, event: SessionEvent.Event) {
           }),
         )
       },
+      "session.next.provider-attempt.started": () => Effect.void,
+      "session.next.provider-attempt.settled": () => Effect.void,
+      "session.next.provider-attempt.abandoned": () => Effect.void,
       "session.next.shell.started": (event) => {
         return adapter.appendMessage(
           SessionMessage.Shell.make({
@@ -257,6 +260,12 @@ export function update(adapter: Adapter, event: SessionEvent.Event) {
           if (match) match.text += event.data.delta
         })
       },
+      "session.next.text.progress": (event) => {
+        return updateOwnedAssistant(event.data.assistantMessageID, (draft) => {
+          const match = latestText(draft, event.data.textID)
+          if (match) match.text = event.data.text
+        })
+      },
       "session.next.text.ended": (event) => {
         return updateOwnedAssistant(event.data.assistantMessageID, (draft) => {
           const match = latestText(draft, event.data.textID)
@@ -279,6 +288,12 @@ export function update(adapter: Adapter, event: SessionEvent.Event) {
         })
       },
       "session.next.tool.input.delta": () => Effect.void,
+      "session.next.tool.input.progress": (event) => {
+        return updateOwnedAssistant(event.data.assistantMessageID, (draft) => {
+          const match = latestTool(draft, event.data.callID)
+          if (match && match.state.status === "pending") match.state.input = event.data.text
+        })
+      },
       "session.next.tool.input.ended": (event) => {
         return updateOwnedAssistant(event.data.assistantMessageID, (draft) => {
           const match = latestTool(draft, event.data.callID)
@@ -376,6 +391,12 @@ export function update(adapter: Adapter, event: SessionEvent.Event) {
         return updateOwnedAssistant(event.data.assistantMessageID, (draft) => {
           const match = latestReasoning(draft, event.data.reasoningID)
           if (match) match.text += event.data.delta
+        })
+      },
+      "session.next.reasoning.progress": (event) => {
+        return updateOwnedAssistant(event.data.assistantMessageID, (draft) => {
+          const match = latestReasoning(draft, event.data.reasoningID)
+          if (match) match.text = event.data.text
         })
       },
       "session.next.reasoning.ended": (event) => {

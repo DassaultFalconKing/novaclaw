@@ -134,3 +134,19 @@ test("step finish records settlement without publishing step ended", async () =>
   expect(published.some((event) => event.type === "session.next.step.ended.2")).toBe(false)
   expect(publisher.stepSettlement()).toMatchObject({ finish: "stop" })
 })
+
+test("long streamed text emits bounded durable progress and an exact final boundary", async () => {
+  const { published, publisher } = capture()
+  await Effect.runPromise(publisher.publish(LLMEvent.textStart({ id: "text-progress" })))
+  await Effect.runPromise(publisher.publish(LLMEvent.textDelta({ id: "text-progress", text: "a".repeat(511) })))
+  expect(published.some((event) => event.type === "session.next.text.progress.1")).toBe(false)
+  await Effect.runPromise(publisher.publish(LLMEvent.textDelta({ id: "text-progress", text: "b" })))
+  const progress = published.filter((event) => event.type === "session.next.text.progress.1")
+  expect(progress).toHaveLength(1)
+  expect(progress[0]?.data).toMatchObject({ text: `${"a".repeat(511)}b` })
+  await Effect.runPromise(publisher.publish(LLMEvent.textDelta({ id: "text-progress", text: "tail" })))
+  await Effect.runPromise(publisher.publish(LLMEvent.textEnd({ id: "text-progress" })))
+  expect(published.findLast((event) => event.type === "session.next.text.ended.1")?.data).toMatchObject({
+    text: `${"a".repeat(511)}btail`,
+  })
+})

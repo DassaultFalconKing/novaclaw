@@ -1,9 +1,9 @@
 export * as SessionV2 from "./session"
 export * from "./session/schema"
 
-import { DateTime, Duration, Effect, Layer, Schema, Context, Stream } from "effect"
+import { DateTime, Duration, Effect, Layer, Option, Schema, Context, Stream } from "effect"
 import { ListAnchor } from "@novaclaw/schema/session"
-import { and, asc, desc, eq, gt, isNull, like, lt, or, type SQL } from "drizzle-orm"
+import { and, asc, desc, eq, gt, isNotNull, isNull, like, lt, or, type SQL } from "drizzle-orm"
 import { ProjectV2 } from "./project"
 import { WorkspaceV2 } from "./workspace"
 import { ModelV2 } from "./model"
@@ -14,7 +14,7 @@ import { PromptInput } from "@novaclaw/schema/prompt-input"
 import { EventV2 } from "./event"
 import { Database } from "./database/database"
 import { SessionProjector } from "./session/projector"
-import { SessionMessageTable, SessionTable } from "./session/sql"
+import { SessionInputTable, SessionMessageTable, SessionTable } from "./session/sql"
 import { SessionSchema } from "./session/schema"
 import { AbsolutePath, PositiveInt, RelativePath } from "./schema"
 import { AgentV2 } from "./agent"
@@ -42,6 +42,10 @@ import { Revert } from "@novaclaw/schema/revert"
 import { FSUtil } from "./fs-util"
 import { SessionDurable } from "@novaclaw/schema/durable-event-manifest"
 import { Config } from "./config"
+import { ConfigRuntimeGuards } from "./config/runtime-guards"
+import { SettingsConfigStore } from "./settings-config-store"
+import { SessionStatusEvent } from "@novaclaw/schema/session-status-event"
+import { SessionSpawnDispatch } from "./session/spawn-dispatch"
 import { CommandV2 } from "./command"
 import { ExternalCommandSource } from "./command/external-command-source"
 import { SkillCommand } from "./command/skill-command"
@@ -193,10 +197,20 @@ export class PromptConflictError extends Schema.TaggedErrorClass<PromptConflictE
   sessionID: SessionSchema.ID,
   messageID: SessionMessage.ID,
 }) {}
+export class PromptBacklogError extends Schema.TaggedErrorClass<PromptBacklogError>()("Session.PromptBacklogError", {
+  sessionID: SessionSchema.ID,
+  limit: Schema.Number,
+  pending: Schema.Number,
+}) {}
 export const MessageNotFoundError = SessionRevert.MessageNotFoundError
 export type MessageNotFoundError = SessionRevert.MessageNotFoundError
 
-export type Error = NotFoundError | MessageDecodeError | OperationUnavailableError | PromptConflictError
+export type Error =
+  | NotFoundError
+  | MessageDecodeError
+  | OperationUnavailableError
+  | PromptConflictError
+  | PromptBacklogError
 
 export interface Interface {
   readonly list: (input?: ListInput) => Effect.Effect<SessionSchema.Info[]>
@@ -281,7 +295,7 @@ export interface Interface {
     prompt: PromptInput.Prompt
     delivery?: SessionInput.Delivery
     resume?: boolean
-  }) => Effect.Effect<SessionInput.Admitted, NotFoundError | PromptConflictError>
+  }) => Effect.Effect<SessionInput.Admitted, NotFoundError | PromptConflictError | PromptBacklogError>
   readonly shell: (input: {
     id?: EventV2.ID
     sessionID: SessionSchema.ID
@@ -294,7 +308,9 @@ export interface Interface {
     skill: string
     resume?: boolean
   }) => Effect.Effect<void, OperationUnavailableError>
-  readonly command: (input: CommandInput) => Effect.Effect<CommandResult, NotFoundError | PromptConflictError>
+  readonly command: (
+    input: CommandInput,
+  ) => Effect.Effect<CommandResult, NotFoundError | PromptConflictError | PromptBacklogError>
   readonly compact: (input: CompactInput) => Effect.Effect<void, NotFoundError | OperationUnavailableError>
   readonly wait: (id: SessionSchema.ID) => Effect.Effect<void, NotFoundError | OperationUnavailableError>
   readonly active: Effect.Effect<ReadonlySet<SessionSchema.ID>>
@@ -452,8 +468,76 @@ export const layer = Layer.effect(
     const store = yield* SessionStore.Service
     const locations = yield* LocationServiceMap.Service
     const compactionRequests = yield* SessionCompactionRequest.Service
+    const settings = yield* SettingsConfigStore.Service
+    const spawnDispatch = yield* SessionSpawnDispatch.Service
     const isDurableSessionEvent = Schema.is(SessionEvent.Durable)
     const decode = SessionMessageRead.decodeRow
+
+    // A Location spawner cannot depend on SessionExecution without closing the global/location
+    // graph cycle. Install the one process-global wake callback here, after both sides exist.
+    yield* spawnDispatch.install(execution.wake)
+    // Restart recovery is intentionally narrow: only unpromoted durable inputs of child Sessions
+    // are woken. No in-flight provider turn is replayed here.
+    const recoverableChildren = yield* db
+      .selectDistinct({ id: SessionInputTable.session_id })
+      .from(SessionInputTable)
+      .innerJoin(SessionTable, eq(SessionTable.id, SessionInputTable.session_id))
+      .where(
+        and(
+          isNull(SessionInputTable.promoted_seq),
+          isNotNull(SessionTable.parent_id),
+          isNull(SessionTable.result),
+        ),
+      )
+      .all()
+      .pipe(Effect.orDie)
+    yield* Effect.forEach(recoverableChildren, (child) => execution.wake(child.id), { discard: true })
+
+    const ensureInboxCapacity = Effect.fn("V2Session.ensureInboxCapacity")(function* (
+      session: SessionSchema.Info,
+      messageID: SessionMessage.ID,
+    ) {
+      if (yield* SessionInput.find(db, messageID)) return
+      const values = yield* settings.all()
+      const decoded = Schema.decodeUnknownOption(ConfigRuntimeGuards.Info)(values.runtime_guards)
+      const guards = ConfigRuntimeGuards.resolve(Option.getOrUndefined(decoded))
+      if (!guards) return
+      const pending = yield* SessionInput.countPending(db, session.id)
+      if (pending < guards.maxInboxBacklog) return
+      const message = `Session inbox already contains ${pending} pending inputs; the configured limit is ${guards.maxInboxBacklog}`
+      yield* events
+        .publish(SessionEvent.Synthetic, {
+          sessionID: session.id,
+          messageID: SessionMessage.ID.create(),
+          timestamp: yield* DateTime.now,
+          text:
+            `⚠️ NovaClaw rejected another queued input because ${message}. ` +
+            "Existing durable inputs were preserved; wait for them to drain or Stop and inspect the Session before retrying.",
+        })
+        .pipe(Effect.ignore)
+      if (!(yield* execution.active).has(session.id))
+        yield* events
+          .publish(
+            SessionStatusEvent.Status,
+            {
+              sessionID: session.id,
+              status: {
+                type: "paused",
+                reason: "inbox_backlog",
+                message,
+                limit: guards.maxInboxBacklog,
+                observed: pending,
+              },
+            },
+            { location: session.location },
+          )
+          .pipe(Effect.ignore)
+      return yield* new PromptBacklogError({
+        sessionID: session.id,
+        limit: guards.maxInboxBacklog,
+        pending,
+      })
+    })
 
     // The shared setter shape (setTitle/setMetadata/setArchived/setPermission): the cycle-free
     // `SessionPatch.patchSessionRecord` (read row -> fromRow -> merge -> full-info NATIVE
@@ -519,11 +603,12 @@ export const layer = Layer.effect(
       prompt: Effect.fn("V2Session.prompt")((input) =>
         Effect.uninterruptible(
           Effect.gen(function* () {
-            yield* result.get(input.sessionID)
+            const session = yield* result.get(input.sessionID)
             const prompt = resolvePrompt(input.prompt)
             const messageID = input.id ?? SessionMessage.ID.create()
             const delivery = input.delivery ?? "steer"
             const expected = { sessionID: input.sessionID, messageID, prompt, delivery }
+            yield* ensureInboxCapacity(session, messageID)
             const admitted = yield* SessionInput.admit(db, events, {
               id: messageID,
               sessionID: input.sessionID,
@@ -720,6 +805,7 @@ export const layer = Layer.effect(
         const prompt = resolvePrompt({ text: resolved.text })
         const delivery = "queue" as const
         const expected = { sessionID: input.sessionID, messageID, prompt, delivery }
+        yield* ensureInboxCapacity(session, messageID)
         const admitted = yield* SessionInput.admit(db, events, {
           id: messageID,
           sessionID: input.sessionID,
@@ -988,16 +1074,17 @@ export const layer = Layer.effect(
         yield* execution.wake(input.sessionID)
       }),
       wait: Effect.fn("V2Session.wait")(function* (sessionID) {
-        // K1 de-stub: join on completion, same semantics as the wait TOOL — poll the session's
-        // `result` (set by exit() via the Completed event) until present. Times out after ~2
-        // minutes with the retryable unavailable error, so a client keeps waiting by re-calling.
-        const POLL_MS = 2000
-        const MAX_POLLS = 60
-        for (let i = 0; i < MAX_POLLS; i++) {
-          const session = yield* result.get(sessionID)
-          if (session.result !== undefined) return
-          yield* Effect.sleep(Duration.millis(POLL_MS))
-        }
+        const session = yield* result.get(sessionID)
+        if (session.result !== undefined) return
+        const completed = yield* events
+          .durable({ aggregateID: sessionID })
+          .pipe(
+            Stream.filter((event) => event.type === SessionEvent.Completed.type),
+            Stream.runHead,
+            Effect.orDie,
+            Effect.timeoutOption(Duration.minutes(2)),
+          )
+        if (Option.isSome(completed) && Option.isSome(completed.value)) return
         return yield* new OperationUnavailableError({ operation: "wait" })
       }),
       active: execution.active,
@@ -1042,6 +1129,8 @@ export const defaultLayer = layer.pipe(
   Layer.provide(Database.defaultLayer),
   Layer.provide(ProjectV2.defaultLayer),
   Layer.provide(SessionCompactionRequest.defaultLayer),
+  Layer.provide(SettingsConfigStore.defaultLayer),
+  Layer.provide(SessionSpawnDispatch.defaultLayer),
   Layer.orDie,
 )
 
@@ -1072,5 +1161,7 @@ export const node = makeGlobalNode({
     LocationServiceMap.node,
     SessionProjector.node,
     SessionCompactionRequest.node,
+    SettingsConfigStore.node,
+    SessionSpawnDispatch.node,
   ],
 })

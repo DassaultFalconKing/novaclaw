@@ -11,6 +11,7 @@ import { SessionStrict } from "./session-strict"
 import { SessionType } from "./session-type"
 import { Revert } from "./revert"
 import { PermissionRuleset } from "./permission-ruleset"
+import { SessionProviderRecovery } from "./session-provider-recovery"
 
 export const ID = SessionID
 export type ID = SessionID
@@ -62,6 +63,7 @@ export const Info = Schema.Struct({
   thinkingBudget: Schema.Boolean.pipe(optional),
   surgicalEdits: Schema.Boolean.pipe(optional),
   askBeforeChanges: Schema.Boolean.pipe(optional),
+  providerRecovery: SessionProviderRecovery.Info.pipe(optional),
   result: Schema.Unknown.pipe(optional),
   cost: Schema.Finite,
   tokens: Schema.Struct({

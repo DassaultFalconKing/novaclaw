@@ -23,6 +23,8 @@ import { ConfigPersona } from "./config/persona"
 import { ConfigPlugin } from "./config/plugin"
 import { ConfigProvider } from "./config/provider"
 import { ConfigProviderPreset } from "./config/provider-preset"
+import { ConfigProviderWatchdog } from "./config/provider-watchdog"
+import { ConfigRuntimeGuards } from "./config/runtime-guards"
 import { ConfigReference } from "./config/reference"
 import { ConfigServer } from "./config/server"
 import { ConfigStrict } from "./config/strict"
@@ -52,12 +54,10 @@ export class Info extends Schema.Class<Info>("Config.Info")({
   username: Schema.String.pipe(Schema.optional).annotate({
     description: "Username displayed in conversations and used for telemetry identity",
   }),
-  expertise: Schema.Literals(["normal", "advanced", "developer"])
-    .pipe(Schema.optional)
-    .annotate({
-      description:
-        "The user's expertise level, mirrored from the UI (uix.md §6) so the model can meet them there — 'normal' adds a plain-language system hint",
-    }),
+  expertise: Schema.Literals(["normal", "advanced", "developer"]).pipe(Schema.optional).annotate({
+    description:
+      "The user's expertise level, mirrored from the UI (uix.md §6) so the model can meet them there — 'normal' adds a plain-language system hint",
+  }),
   server: ConfigServer.Info.pipe(Schema.optional).annotate({
     description: "Server configuration for `novaclaw serve` and web commands (port/hostname/mDNS/CORS)",
   }),
@@ -88,6 +88,12 @@ export class Info extends Schema.Class<Info>("Config.Info")({
   }),
   mcp: ConfigMCP.Info.pipe(Schema.optional).annotate({
     description: "MCP server configuration",
+  }),
+  provider_watchdog: ConfigProviderWatchdog.Info.pipe(Schema.optional).annotate({
+    description: "Optional provider inactivity and absolute-turn watchdog policy",
+  }),
+  runtime_guards: ConfigRuntimeGuards.Info.pipe(Schema.optional).annotate({
+    description: "Session work-volume limits independent of provider transport watchdogs",
   }),
   compaction: ConfigCompaction.Info.pipe(Schema.optional).annotate({
     description: "Conversation compaction behavior",
@@ -120,7 +126,8 @@ export class Info extends Schema.Class<Info>("Config.Info")({
     description: "Affective mode — emotion-modulated sampling + loop-breaking nudges (P3)",
   }),
   strict: ConfigStrict.Info.pipe(Schema.optional).annotate({
-    description: "Strict mode — the Juvenile Harness posture for weak/local models: harness-owned decomposition, per-step verification, recovery (jh.md; E6)",
+    description:
+      "Strict mode — the Juvenile Harness posture for weak/local models: harness-owned decomposition, per-step verification, recovery (jh.md; E6)",
   }),
   instances: Schema.Array(
     Schema.Struct({
@@ -177,7 +184,8 @@ export class Info extends Schema.Class<Info>("Config.Info")({
           "OpenAI-compatible embeddings base URL for the LAN embedding device (e.g. http://spark:8001/v1). Unset = keyword-only (FTS) memory search",
       }),
       model: Schema.String.pipe(Schema.optional).annotate({
-        description: "Embedding model id as served (e.g. qwen3-embedding). Its width must match the graph's vector column (1024)",
+        description:
+          "Embedding model id as served (e.g. qwen3-embedding). Its width must match the graph's vector column (1024)",
       }),
     })
       .pipe(Schema.optional)
@@ -187,7 +195,9 @@ export class Info extends Schema.Class<Info>("Config.Info")({
       }),
   })
     .pipe(Schema.optional)
-    .annotate({ description: "Graph-memory (KB-G) privacy switch — the lay Memory on/off (notes/kb-graph-plan.md §5)" }),
+    .annotate({
+      description: "Graph-memory (KB-G) privacy switch — the lay Memory on/off (notes/kb-graph-plan.md §5)",
+    }),
   quality: Schema.Struct({
     enabled: Schema.Boolean.pipe(Schema.optional),
     cadence: Schema.Finite.pipe(Schema.optional).annotate({
@@ -197,7 +207,9 @@ export class Info extends Schema.Class<Info>("Config.Info")({
       description: "Hard timeout for the test gate in ms (default 300000)",
     }),
     commands: Schema.Struct({
-      syntax: Schema.String.pipe(Schema.optional).annotate({ description: "Per-file syntax check ({file} placeholder)" }),
+      syntax: Schema.String.pipe(Schema.optional).annotate({
+        description: "Per-file syntax check ({file} placeholder)",
+      }),
       check: Schema.String.pipe(Schema.optional).annotate({ description: "Per-file incremental verifier ({file})" }),
       typecheck: Schema.String.pipe(Schema.optional).annotate({ description: "Whole-module type/compile check" }),
       test: Schema.String.pipe(Schema.optional).annotate({ description: "Test-gate command" }),
@@ -214,7 +226,8 @@ export class Info extends Schema.Class<Info>("Config.Info")({
       description: "A SearXNG instance URL (e.g. http://localhost:8080). When set it REPLACES the built-in engines.",
     }),
     disabledEngines: Schema.String.pipe(Schema.Array, Schema.optional).annotate({
-      description: "Built-in engine ids to turn off (currently: duckduckgo, wikipedia) — for one that starts misbehaving.",
+      description:
+        "Built-in engine ids to turn off (currently: duckduckgo, wikipedia) — for one that starts misbehaving.",
     }),
     timeoutMs: Schema.Finite.pipe(Schema.optional).annotate({ description: "Per-engine timeout in ms (default 8000)" }),
     // The web traffic governor (core/web/fetch-pace.ts). Governs ALL outbound web reads — search AND
@@ -227,16 +240,19 @@ export class Info extends Schema.Class<Info>("Config.Info")({
         description: "Sustained delay between reads of the SAME site, in ms (default 4000). Lower = more bot-like.",
       }),
       burst: Schema.Finite.pipe(Schema.optional).annotate({
-        description: "Reads allowed back-to-back per site before the delay applies (default 3) — a person opening a few tabs.",
+        description:
+          "Reads allowed back-to-back per site before the delay applies (default 3) — a person opening a few tabs.",
       }),
       perHostConcurrency: Schema.Finite.pipe(Schema.optional).annotate({
-        description: "Simultaneous requests to ONE site (default 1). Above 1 is swarming and is the fastest way to get blocked.",
+        description:
+          "Simultaneous requests to ONE site (default 1). Above 1 is swarming and is the fastest way to get blocked.",
       }),
       dailyPerHost: Schema.Finite.pipe(Schema.optional).annotate({
         description: "Reads per site per UTC day (default 150) — a heavy human reader, far below mirroring a site.",
       }),
       sameUrlLimit: Schema.Finite.pipe(Schema.optional).annotate({
-        description: "Refuse re-fetching one URL more than this many times per session (default 3) — the fetch-loop guard.",
+        description:
+          "Refuse re-fetching one URL more than this many times per session (default 3) — the fetch-loop guard.",
       }),
     })
       .pipe(Schema.optional)
@@ -271,7 +287,7 @@ export class Info extends Schema.Class<Info>("Config.Info")({
     .annotate({
       description:
         "Overrides/additions to the BUILT-IN provider import presets (Settings → Models → Add models). " +
-        "Merged field-wise over the builtins by id — e.g. {\"anthropic\":{\"baseURL\":\"https://…\"}} repairs a " +
+        'Merged field-wise over the builtins by id — e.g. {"anthropic":{"baseURL":"https://…"}} repairs a ' +
         "moved vendor endpoint at RUNTIME (self-healing: any working model can PATCH /config with this key; " +
         "no config-file edits, no rebuild). Unknown ids add new presets; hidden:true hides one. " +
         "Already-imported providers are repaired via providers.<id>.api.url instead — presets shape future imports only.",

@@ -467,8 +467,7 @@ export const dict = {
   "prompt.remote.pickAccount": "Which messenger?",
   "prompt.remote.pickChat": "Which conversation?",
   "prompt.remote.loading": "Loading conversations…",
-  "prompt.remote.chatsEmpty":
-    "No conversations known yet. Send the account a message once and it appears here.",
+  "prompt.remote.chatsEmpty": "No conversations known yet. Send the account a message once and it appears here.",
   "prompt.remote.manual": "Or type a chat id / handle",
   "prompt.remote.manualUse": "Use",
   "prompt.remote.trust.title": "Who is on the other side?",
@@ -1173,6 +1172,29 @@ export const dict = {
   "settings.storage.tmp.description": "Short-lived working files. Cleared by the operating system.",
 
   "settings.recovery.row.resetUi.title": "Reset appearance and layout",
+  "settings.recovery.watchdog.toast.failed": "Saving provider watchdog settings failed",
+  "settings.recovery.watchdog.enabled.title": "Provider watchdog",
+  "settings.recovery.watchdog.enabled.description":
+    "Interrupt a provider request that becomes silent or exceeds its wall-clock limit, then use bounded retry recovery",
+  "settings.recovery.watchdog.inactivity.title": "Maximum silence (ms)",
+  "settings.recovery.watchdog.inactivity.description":
+    "Time allowed between provider stream events before treating the connection as stalled",
+  "settings.recovery.watchdog.absolute.title": "Maximum request time (ms)",
+  "settings.recovery.watchdog.absolute.description":
+    "Hard wall-clock limit for one provider request; tune this for the model and hardware",
+  "settings.recovery.guards.toast.failed": "Saving runtime guard settings failed",
+  "settings.recovery.guards.enabled.title": "Runtime guard caps",
+  "settings.recovery.guards.enabled.description":
+    "Bound work volume independently of provider transport timeouts; disabling these caps is not recommended",
+  "settings.recovery.guards.turn.title": "Tool calls per provider turn",
+  "settings.recovery.guards.turn.description": "Stop before locally executing a tool call beyond this turn limit",
+  "settings.recovery.guards.drain.title": "Tool calls per Session drain",
+  "settings.recovery.guards.drain.description": "Stop a multi-turn drain after this total number of tool calls",
+  "settings.recovery.guards.inbox.title": "Pending inbox inputs",
+  "settings.recovery.guards.inbox.description": "Reject new durable inputs when this per-Session backlog is full",
+  "settings.recovery.guards.output.title": "Streamed output bytes",
+  "settings.recovery.guards.output.description":
+    "Stop one provider turn after this many UTF-8 text, reasoning, and tool-input bytes",
   "settings.recovery.row.resetUi.description":
     "Reset how NovaClaw looks and is laid out back to the defaults — theme, the welcome tour, and view options. Your chats, files, and connected models are kept.",
   "settings.recovery.row.resetUi.action": "Reset",
@@ -1581,7 +1603,8 @@ export const dict = {
   "settings.messengers.add": "Add account",
   "settings.messengers.addThenLogin": "Add & log in",
   "settings.messengers.empty": "No messenger accounts yet. Add one to let NovaClaw talk where you talk.",
-  "settings.messengers.airgapped": "Messengers are off while NovaClaw is offline or airgapped — nothing connects until you go back online.",
+  "settings.messengers.airgapped":
+    "Messengers are off while NovaClaw is offline or airgapped — nothing connects until you go back online.",
   "settings.messengers.enabled": "Enabled",
   "settings.messengers.login": "Log in",
   "settings.messengers.pair": "Pair",
@@ -1590,7 +1613,8 @@ export const dict = {
   "settings.messengers.pickDriver": "Which messenger?",
   "settings.messengers.setup.title": "How to get this",
   "settings.messengers.setup.open": "Open the setup page",
-  "settings.messengers.auth.login": "NovaClaw signs into your own account and answers as you while you're away. You stay in control — flip the responder any time.",
+  "settings.messengers.auth.login":
+    "NovaClaw signs into your own account and answers as you while you're away. You stay in control — flip the responder any time.",
   "settings.messengers.auth.key": "Uses a bot or app token you paste — a separate identity from your own account.",
   "settings.messengers.auth.none": "Connects with just the settings below — no credentials needed.",
   "settings.messengers.toast.failed": "Messenger action failed",
@@ -1621,7 +1645,8 @@ export const dict = {
   "settings.messengers.speed.description":
     "NovaClaw types replies at a human pace, across all chats at once, so this account is never flagged as a bot. This sets how fast it types, in characters per second.",
   "settings.messengers.speed.unit": "characters / second",
-  "settings.messengers.speed.human": "A person types around {{default}}/s. Lower is safer; higher is faster but riskier.",
+  "settings.messengers.speed.human":
+    "A person types around {{default}}/s. Lower is safer; higher is faster but riskier.",
   "settings.messengers.speed.warning":
     "⚠️ This is faster than a human types. Messaging providers watch for bot-like speed and may flag or BAN your account for posting too fast. Only go this high if you accept that risk.",
   "settings.quality.title": "Quality",
@@ -1820,9 +1845,11 @@ export const dict = {
   "settings.webSearch.status.searxng": "Using your SearXNG instance.",
   "settings.webSearch.status.airgapped": "Off — NovaClaw is in offline / airgap mode, so nothing leaves this machine.",
   "settings.webSearch.row.searxng.title": "Your SearXNG instance",
-  "settings.webSearch.row.searxng.description": "A SearXNG URL to use instead of the built-in engines. Leave empty to use the built-in search.",
+  "settings.webSearch.row.searxng.description":
+    "A SearXNG URL to use instead of the built-in engines. Leave empty to use the built-in search.",
   "settings.webSearch.builtin.title": "Built-in engines",
-  "settings.webSearch.builtin.description": "NovaClaw asks these free engines directly and merges the results. Turn one off if it starts failing.",
+  "settings.webSearch.builtin.description":
+    "NovaClaw asks these free engines directly and merges the results. Turn one off if it starts failing.",
   "settings.webSearch.builtin.overridden": "Your SearXNG instance is handling search, so the built-in engines are off.",
   "settings.webSearch.builtin.engineHint": "Included in built-in search",
   "settings.webSearch.toast.failed": "Couldn't save web search settings",
@@ -1832,15 +1859,20 @@ export const dict = {
   "settings.webSearch.throttle.warning":
     "⚠️ Changing these can get you blocked. Sites judge you by your traffic, and reads come from your own connection — so a faster, heavier setting risks your IP being rate-limited or banned, for you and for anything else on your network. Leave a field empty to use its default.",
   "settings.webSearch.throttle.interval": "Delay between reads of one site",
-  "settings.webSearch.throttle.interval.hint": "Milliseconds to wait before reading the same site again. Lower looks more like a bot.",
+  "settings.webSearch.throttle.interval.hint":
+    "Milliseconds to wait before reading the same site again. Lower looks more like a bot.",
   "settings.webSearch.throttle.burst": "Reads allowed back-to-back",
-  "settings.webSearch.throttle.burst.hint": "How many quick reads of one site before the delay kicks in — like opening a few tabs at once.",
+  "settings.webSearch.throttle.burst.hint":
+    "How many quick reads of one site before the delay kicks in — like opening a few tabs at once.",
   "settings.webSearch.throttle.concurrency": "Simultaneous reads per site",
-  "settings.webSearch.throttle.concurrency.hint": "Keep at 1. Reading one site on several connections at once is the fastest way to get blocked.",
+  "settings.webSearch.throttle.concurrency.hint":
+    "Keep at 1. Reading one site on several connections at once is the fastest way to get blocked.",
   "settings.webSearch.throttle.daily": "Reads per site per day",
-  "settings.webSearch.throttle.daily.hint": "A daily ceiling per site, so a stuck agent can't spend all day hammering one server.",
+  "settings.webSearch.throttle.daily.hint":
+    "A daily ceiling per site, so a stuck agent can't spend all day hammering one server.",
   "settings.webSearch.throttle.sameUrl": "Same-page retry limit",
-  "settings.webSearch.throttle.sameUrl.hint": "Refuse to fetch one page more times than this in a session — catches an agent stuck in a loop.",
+  "settings.webSearch.throttle.sameUrl.hint":
+    "Refuse to fetch one page more times than this in a session — catches an agent stuck in a loop.",
   "settings.tools.title": "Tools",
   "settings.tools.description":
     "Ad-hoc tool recipes: a name, a one-line description the model sees in its prompt, and a manual it pulls on demand (the API shape plus a curl example). The model runs them from the shell — no MCP server to set up.",
@@ -1858,6 +1890,50 @@ export const dict = {
   "settings.tools.error.description": "Description is required, max 300 chars.",
   "settings.tools.error.manual": "Manual is required, max 8192 chars.",
   "settings.tools.error.duplicate": "A tool with this name already exists.",
+  "settings.integrations.title": "Integrations",
+  "settings.integrations.description":
+    "Connect reusable skills and Model Context Protocol servers. Changes are saved for this NovaClaw instance and loaded into new agent turns.",
+  "settings.integrations.skills.title": "Skill sources",
+  "settings.integrations.skills.description":
+    "Add a local directory or an HTTP(S) repository containing SKILL.md packages.",
+  "settings.integrations.skills.empty": "No additional skill sources connected.",
+  "settings.integrations.skills.source": "Skill source",
+  "settings.integrations.skills.placeholder": "/path/to/skills or https://example.com/skills/",
+  "settings.integrations.skills.add": "Connect skills",
+  "settings.integrations.skills.error.empty": "Enter a skill directory or URL.",
+  "settings.integrations.skills.error.duplicate": "This skill source is already connected.",
+  "settings.integrations.skills.toast.failed": "Saving skill sources failed",
+  "settings.integrations.skills.confirm.title": "Disconnect this skill source?",
+  "settings.integrations.skills.confirm.description":
+    "NovaClaw will stop discovering skills from “{{source}}”. Files at the source are not deleted.",
+  "settings.integrations.mcp.title": "MCP servers",
+  "settings.integrations.mcp.description":
+    "Add a local command or remote HTTP endpoint. Enabled servers connect automatically for agent sessions; use /mcp in a chat to inspect live status.",
+  "settings.integrations.mcp.empty": "No MCP servers configured.",
+  "settings.integrations.mcp.name": "server name (lowercase slug)",
+  "settings.integrations.mcp.local": "Local command",
+  "settings.integrations.mcp.remote": "Remote URL",
+  "settings.integrations.mcp.local.placeholder": '["command", "arg1", "arg2"]',
+  "settings.integrations.mcp.remote.placeholder": "https://mcp.example.com/",
+  "settings.integrations.mcp.add": "Connect MCP",
+  "settings.integrations.mcp.error.name": "Name must be a lowercase slug (a-z, 0-9, -, _), max 64 chars.",
+  "settings.integrations.mcp.error.duplicate": "An MCP server with this name already exists.",
+  "settings.integrations.mcp.error.local": "Enter a non-empty JSON array of command arguments.",
+  "settings.integrations.mcp.error.remote": "Enter a valid HTTP or HTTPS URL.",
+  "settings.integrations.mcp.toast.failed": "Saving MCP server failed",
+  "session.providerRecovery.title": "Previous model turn was interrupted",
+  "session.providerRecovery.description":
+    "The partial response was preserved. Continue from durable history when you are ready.",
+  "session.providerRecovery.toolDescription":
+    "A tool may have started before NovaClaw stopped. Inspect its target before repeating any action.",
+  "session.providerRecovery.resume": "Continue safely",
+  "session.providerRecovery.resuming": "Continuing…",
+  "session.providerRecovery.error": "Could not continue the session",
+  "session.runtimeGuard.title": "Session paused by a runtime guard",
+  "session.runtimeGuard.inbox": "Wait for existing queued inputs to drain before submitting another message.",
+  "session.runtimeGuard.resume": "Resume",
+  "session.runtimeGuard.resuming": "Resuming…",
+  "session.runtimeGuard.error": "Could not resume the session",
   "settings.agents.title": "Agents",
   "settings.agents.description": "Agent settings — coming soon.",
   "settings.commands.title": "Commands",

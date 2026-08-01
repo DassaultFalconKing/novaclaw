@@ -17,6 +17,7 @@ import { SessionExecution } from "@novaclaw/core/session/execution"
 import { SessionInput } from "@novaclaw/core/session/input"
 import { SessionInputTable, SessionMessageTable, SessionTable } from "@novaclaw/core/session/sql"
 import { SessionStore } from "@novaclaw/core/session/store"
+import { SettingsConfigStore } from "@novaclaw/core/settings-config-store"
 import { testEffect } from "./lib/effect"
 
 const executionCalls: SessionV2.ID[] = []
@@ -43,7 +44,14 @@ const execution = Layer.succeed(
 )
 const it = testEffect(
   AppNodeBuilder.build(
-    LayerNode.group([Database.node, EventV2.node, SessionProjector.node, SessionStore.node, SessionV2.node]),
+    LayerNode.group([
+      Database.node,
+      EventV2.node,
+      SessionProjector.node,
+      SessionStore.node,
+      SettingsConfigStore.node,
+      SessionV2.node,
+    ]),
     [[SessionExecution.node, execution]],
   ),
 )
@@ -91,6 +99,41 @@ const eventCount = (type: string) =>
   )
 
 describe("SessionV2.prompt", () => {
+  it.effect("rejects backlog growth at the configured cap but preserves exact retries", () =>
+    Effect.gen(function* () {
+      yield* setup
+      const session = yield* SessionV2.Service
+      const settings = yield* SettingsConfigStore.Service
+      const firstID = SessionMessage.ID.create()
+      yield* settings.set("runtime_guards", { maxInboxBacklog: 1 })
+
+      const first = yield* session.prompt({
+        id: firstID,
+        sessionID,
+        prompt: Prompt.make({ text: "Keep this durable input" }),
+        resume: false,
+      })
+      const rejected = yield* session
+        .prompt({ sessionID, prompt: Prompt.make({ text: "Overflow the inbox" }), resume: false })
+        .pipe(Effect.flip)
+      const retried = yield* session.prompt({
+        id: firstID,
+        sessionID,
+        prompt: Prompt.make({ text: "Keep this durable input" }),
+        resume: false,
+      })
+
+      expect(rejected).toMatchObject({
+        _tag: "Session.PromptBacklogError",
+        sessionID,
+        limit: 1,
+        pending: 1,
+      })
+      expect(retried).toEqual(first)
+      expect(yield* admittedCount).toBe(1)
+    }).pipe(Effect.ensuring(SettingsConfigStore.Service.use((settings) => settings.remove("runtime_guards")))),
+  )
+
   it.effect("exposes the execution registry", () =>
     Effect.gen(function* () {
       activeSessions.add(sessionID)

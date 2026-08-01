@@ -15,35 +15,56 @@ describe("controlPatch", () => {
       patch: { agent: "review" },
     })
     expect(
-      controlPatch(
-        envelope("session.next.model.switched", { sessionID: "s", model: { id: "m", providerID: "p" } }),
-      ),
+      controlPatch(envelope("session.next.model.switched", { sessionID: "s", model: { id: "m", providerID: "p" } })),
     ).toEqual({ sessionID: "s", patch: { model: { id: "m", providerID: "p" } } })
-    expect(controlPatch(envelope("session.next.responder.switched", { sessionID: "s", responder: "operator" }))).toEqual(
-      { sessionID: "s", patch: { responder: "operator" } },
-    )
+    expect(
+      controlPatch(envelope("session.next.responder.switched", { sessionID: "s", responder: "operator" })),
+    ).toEqual({ sessionID: "s", patch: { responder: "operator" } })
     expect(controlPatch(envelope("session.next.mode.switched", { sessionID: "s", permissionMode: "bypass" }))).toEqual({
       sessionID: "s",
       patch: { permissionMode: "bypass" },
     })
-    expect(controlPatch(envelope("session.next.strict.switched", { sessionID: "s", strict: { enabled: true } }))).toEqual(
-      { sessionID: "s", patch: { strict: { enabled: true } } },
-    )
+    expect(
+      controlPatch(envelope("session.next.strict.switched", { sessionID: "s", strict: { enabled: true } })),
+    ).toEqual({ sessionID: "s", patch: { strict: { enabled: true } } })
     expect(
       controlPatch(envelope("session.next.feature.switched", { sessionID: "s", feature: "quality", enabled: true })),
     ).toEqual({ sessionID: "s", patch: { quality: true } })
     expect(
       controlPatch(envelope("session.next.prompt-override.switched", { sessionID: "s", override: "be brief" })),
     ).toEqual({ sessionID: "s", patch: { systemPromptOverride: "be brief" } })
+    expect(controlPatch(envelope("session.next.completed", { sessionID: "s", result: "done" }))).toEqual({
+      sessionID: "s",
+      patch: { result: "done" },
+    })
+    const recovery = {
+      attemptID: "evt_attempt",
+      assistantMessageID: "msg_assistant",
+      model: { id: "m", providerID: "p" },
+      startedAt: 1,
+      toolProtocol: false,
+    }
+    expect(controlPatch(envelope("session.next.provider-attempt.started", { sessionID: "s", recovery }))).toEqual({
+      sessionID: "s",
+      patch: { providerRecovery: recovery },
+    })
+    expect(
+      controlPatch(envelope("session.next.provider-attempt.settled", { sessionID: "s", attemptID: "evt_attempt" })),
+    ).toEqual({
+      sessionID: "s",
+      patch: { providerRecovery: undefined },
+      providerAttemptID: "evt_attempt",
+    })
     expect(
       controlPatch(envelope("session.next.type.switched", { sessionID: "s", sessionType: "auto-prompting" })),
     ).toEqual({ sessionID: "s", patch: { type: "auto-prompting" } })
     // T3 shape: the move patches the record's `location` struct (+ subpath), never a flat
     // top-level `directory` — that field doesn't exist on the record and patching it left every
     // reader (folder chip, Chats grouping) on the OLD folder until reload.
-    expect(
-      controlPatch(envelope("session.next.moved", { sessionID: "s", location: { directory: "C:\\x" } })),
-    ).toEqual({ sessionID: "s", patch: { location: { directory: "C:\\x" }, subpath: undefined } })
+    expect(controlPatch(envelope("session.next.moved", { sessionID: "s", location: { directory: "C:\\x" } }))).toEqual({
+      sessionID: "s",
+      patch: { location: { directory: "C:\\x" }, subpath: undefined },
+    })
     expect(
       controlPatch(
         envelope("session.next.moved", { sessionID: "s", location: { directory: "C:\\x" }, subdirectory: "sub" }),
@@ -67,7 +88,9 @@ describe("controlPatch", () => {
   test("ignores non-control events, unknown features, and missing sessionIDs", () => {
     expect(controlPatch(envelope("session.next.prompted", { sessionID: "s" }))).toBeUndefined()
     expect(controlPatch(envelope("session.updated", { info: {} }))).toBeUndefined()
-    expect(controlPatch(envelope("session.next.feature.switched", { sessionID: "s", feature: "bogus" }))).toBeUndefined()
+    expect(
+      controlPatch(envelope("session.next.feature.switched", { sessionID: "s", feature: "bogus" })),
+    ).toBeUndefined()
     expect(controlPatch(envelope("session.next.agent.switched", { agent: "x" }))).toBeUndefined()
   })
 })
@@ -79,5 +102,16 @@ describe("applyControlPatch", () => {
     expect("strict" in draft).toBe(false)
     expect((draft as Record<string, unknown>).quality).toBe(false)
     expect((draft as Record<string, unknown>).agent).toBe("review")
+  })
+
+  test("does not let a late settlement clear a newer provider attempt", () => {
+    const draft = {
+      id: "s",
+      providerRecovery: { attemptID: "evt_new" },
+    } as unknown as Session
+    applyControlPatch(draft, { providerRecovery: undefined }, "evt_old")
+    expect((draft as Record<string, unknown>).providerRecovery).toEqual({ attemptID: "evt_new" })
+    applyControlPatch(draft, { providerRecovery: undefined }, "evt_new")
+    expect("providerRecovery" in draft).toBe(false)
   })
 })

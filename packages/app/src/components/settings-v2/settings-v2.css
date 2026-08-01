@@ -482,6 +482,30 @@
   margin: 0 0 8px;
 }
 
+.settings-v2-field-error {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--v2-state-danger-text, #ef4444);
+}
+
+.settings-v2-integrations-editor {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+}
+
+.settings-v2-integrations-editor--mcp {
+  grid-template-columns: minmax(120px, 0.5fr) minmax(130px, 0.5fr) minmax(220px, 1fr) auto;
+}
+
+@media (max-width: 760px) {
+  .settings-v2-integrations-editor--mcp {
+    grid-template-columns: 1fr;
+  }
+}
+
 .settings-v2-textarea {
   width: 100%;
   min-height: 90px;

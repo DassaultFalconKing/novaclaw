@@ -54,12 +54,22 @@ const id = SessionV2.ID.create()
 // buildLocationServiceMap replacement. The template exercises both an `$1` positional arg
 // and a `` !`echo` `` shell substitution.
 const commandTemplate = "Hi $1 from !`echo bot`"
+const commandWakeCalls: SessionV2.ID[] = []
+const commandExecution = Layer.succeed(
+  SessionExecution.Service,
+  SessionExecution.Service.of({
+    active: Effect.succeed(new Set()),
+    resume: () => Effect.void,
+    interrupt: () => Effect.void,
+    wake: (sessionID) => Effect.sync(() => void commandWakeCalls.push(sessionID)),
+  }),
+)
 const itCommand = testEffect(
   AppNodeBuilder.build(
     LayerNode.group([Database.node, EventV2.node, SessionProjector.node, SessionStore.node, SessionV2.node]),
     [
       [ProjectV2.node, projects],
-      [SessionExecution.node, SessionExecution.noopLayer],
+      [SessionExecution.node, commandExecution],
       [
         LocationServiceMap.node,
         buildLocationServiceMap([
@@ -910,6 +920,7 @@ describe("SessionV2.command", () => {
         (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
       )
       const session = yield* SessionV2.Service
+      commandWakeCalls.length = 0
       const created = yield* session.create({
         location: Location.Ref.make({ directory: AbsolutePath.make(dir.path) }),
       })
@@ -921,6 +932,7 @@ describe("SessionV2.command", () => {
       if (result.type === "subtask") {
         expect(result.childID.startsWith("ses_")).toBe(true)
         expect(result.childID).not.toBe(created.id)
+        expect(commandWakeCalls).toEqual([result.childID])
       }
     }),
   )

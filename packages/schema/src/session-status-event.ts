@@ -29,6 +29,13 @@ export const Info = Schema.Union([
   Schema.Struct({
     type: Schema.Literal("busy"),
   }),
+  Schema.Struct({
+    type: Schema.Literal("paused"),
+    reason: Schema.Literals(["tool_calls_turn", "tool_calls_drain", "streamed_output", "inbox_backlog"]),
+    message: Schema.String,
+    limit: NonNegativeInt,
+    observed: NonNegativeInt,
+  }),
   // Terminal state (K1): the session called exit(result) — done, never busy again. Lets ps/task
   // managers show exited threads instead of inferring it from `result !== undefined`.
   Schema.Struct({

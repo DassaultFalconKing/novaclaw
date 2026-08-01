@@ -10,7 +10,7 @@ import {
   type FinishReason,
   type ProviderErrorEvent,
 } from "@novaclaw/llm"
-import { Cause, DateTime, Duration, Effect, Fiber, FiberSet, Layer, Option, Semaphore, Stream } from "effect"
+import { Cause, DateTime, Duration, Effect, Exit, Fiber, FiberSet, Layer, Option, Semaphore, Stream } from "effect"
 import fs from "node:fs"
 import path from "path"
 import { AgentV2 } from "../../agent"
@@ -43,6 +43,7 @@ import { SessionPatch } from "../patch"
 import { SessionSchema } from "../schema"
 import { SessionStore } from "../store"
 import { SessionTitle } from "../title"
+import { SessionStatusEvent } from "@novaclaw/schema/session-status-event"
 
 import {
   resolveSessionConfig,
@@ -92,7 +93,11 @@ import { Introspection } from "./introspection"
 import { MAX_STEPS_PROMPT } from "./max-steps"
 import { ReasoningBudget } from "./reasoning-budget"
 import { ProviderRetry } from "./provider-retry"
+import { ProviderWatchdog } from "./provider-watchdog"
+import { ConfigProviderWatchdog } from "../../config/provider-watchdog"
+import { ConfigRuntimeGuards } from "../../config/runtime-guards"
 import { FinishRecovery } from "./finish-recovery"
+import { RuntimeGuards } from "./runtime-guards"
 import { Quality } from "./quality"
 import { QualityProvision } from "./quality-provision"
 import { Snapshot } from "../../snapshot"
@@ -196,6 +201,8 @@ export const layer = Layer.effect(
     const db = (yield* Database.Service).db
     const configEntries = yield* config.entries()
     const compaction = SessionCompaction.make({ events, llm, config: configEntries })
+    const providerWatchdog = ConfigProviderWatchdog.resolve(Config.latest(configEntries, "provider_watchdog"))
+    const runtimeGuards = ConfigRuntimeGuards.resolve(Config.latest(configEntries, "runtime_guards"))
     // The B3 persona baseline: composed FIRST in the system prompt (before any per-session
     // override or the agent's own prompt), so the assistant's approach survives model swaps.
     const personaBaseline = Persona.resolve(Config.latest(configEntries, "persona"), {
@@ -565,6 +572,7 @@ export const layer = Layer.effect(
 
     const failInterruptedTools = Effect.fn("SessionRunner.failInterruptedTools")(function* (
       sessionID: SessionSchema.ID,
+      errorMessage = "Tool execution interrupted",
     ) {
       for (const message of yield* getContext(sessionID)) {
         if (message.type !== "assistant") continue
@@ -575,7 +583,7 @@ export const layer = Layer.effect(
             timestamp: yield* DateTime.now,
             assistantMessageID: message.id,
             callID: tool.id,
-            error: { type: "unknown", message: "Tool execution interrupted" },
+            error: { type: "unknown", message: errorMessage },
             provider: {
               executed: tool.provider?.executed === true,
               ...(tool.provider?.metadata === undefined ? {} : { metadata: tool.provider.metadata }),
@@ -617,6 +625,7 @@ export const layer = Layer.effect(
       sessionID: SessionSchema.ID,
       promotion: SessionInput.Delivery | undefined,
       step: number,
+      guardState: RuntimeGuards.DrainState,
       recoverOverflow?: typeof compaction.compactAfterOverflow,
     ) {
       const session = yield* getSession(sessionID)
@@ -803,14 +812,17 @@ export const layer = Layer.effect(
         ? LLM.request({ ...LLM.requestInput(fullRequest), messages: packed.messages })
         : fullRequest
       const startSnapshot = yield* snapshots.capture()
+      const assistantMessageID = SessionMessage.ID.create()
+      const modelRef = {
+        id: ModelV2.ID.make(model.id),
+        providerID: ProviderV2.ID.make(model.provider),
+        ...(session.model?.variant === undefined ? {} : { variant: session.model.variant }),
+      }
       const publisher = createLLMEventPublisher(events, {
         sessionID: session.id,
+        assistantMessageID,
         agent: agent.id,
-        model: {
-          id: ModelV2.ID.make(model.id),
-          providerID: ProviderV2.ID.make(model.provider),
-          ...(session.model?.variant === undefined ? {} : { variant: session.model.variant }),
-        },
+        model: modelRef,
         snapshot: startSnapshot,
       })
       const withPublication = Semaphore.makeUnsafe(1).withPermit
@@ -851,13 +863,16 @@ export const layer = Layer.effect(
       // per-event hot path.
       let steerInterrupt = false
       let sawToolCall = false
+      let sawToolProtocol = false
+      const turnGuardState = RuntimeGuards.initialTurnState()
       let lastSteerCheck = Date.now()
-      const providerStream = budgetedSource.pipe(
+      const providerStream = ProviderWatchdog.stream(budgetedSource, providerWatchdog).pipe(
         Stream.takeUntil(() => steerInterrupt),
         Stream.runForEach((event) =>
           Effect.gen(function* () {
             sawProviderEvent = true
             if (event.type === "tool-call") sawToolCall = true
+            if (event.type.startsWith("tool-")) sawToolProtocol = true
             if (event.type === "finish") finishReason = event.reason
             if (
               shouldCheckForSteer({
@@ -885,6 +900,14 @@ export const layer = Layer.effect(
                 overflowFailure = event
                 return
               }
+            }
+            const guardStop = RuntimeGuards.observe(event, runtimeGuards, guardState, turnGuardState)
+            if (guardStop) {
+              // A complete tool call is a durable transcript fact at the boundary, but it is never
+              // dispatched locally after the cap trips. This also records provider-hosted calls whose
+              // remote outcome may already be ambiguous before the stream is stopped.
+              if (event.type === "tool-call") yield* publish(event)
+              return yield* guardStop
             }
             yield* publish(event)
             if (event.type !== "tool-call" || event.providerExecuted) return
@@ -920,6 +943,7 @@ export const layer = Layer.effect(
           }),
         ),
         Effect.ensuring(withPublication(publisher.flush())),
+        (effect) => ProviderWatchdog.effect(effect, providerWatchdog),
       )
 
       // Scheduler admission (notes/scheduler.md): interactive dispatches immediately;
@@ -935,6 +959,27 @@ export const layer = Layer.effect(
         ...(config.priority > 0 ? { priority: config.priority } : {}),
       }
       yield* scheduler.admit(dispatchSlot)
+      const attemptID = EventV2.ID.create()
+      yield* events.publish(SessionEvent.ProviderAttempt.Started, {
+        sessionID: session.id,
+        timestamp: yield* DateTime.now,
+        recovery: {
+          attemptID,
+          assistantMessageID,
+          model: modelRef,
+          startedAt: yield* DateTime.now,
+          toolProtocol: false,
+        },
+      })
+      if (session.providerRecovery && session.providerRecovery.attemptID !== attemptID)
+        yield* events
+          .publish(SessionEvent.ProviderAttempt.Abandoned, {
+            sessionID: session.id,
+            timestamp: yield* DateTime.now,
+            attemptID: session.providerRecovery.attemptID,
+            reason: "continued",
+          })
+          .pipe(Effect.ignore)
       return yield* Effect.uninterruptibleMask((restore) =>
         Effect.gen(function* () {
           // 1D — the forgiving loop: a TRANSIENT provider failure (local server down or
@@ -954,7 +999,25 @@ export const layer = Layer.effect(
               attempt,
               error: ProviderRetry.retryErrorPayload(transient),
             })
-            yield* restore(Effect.sleep(Duration.millis(ProviderRetry.retryDelayMs(attempt, transient.retryAfterMs))))
+            const retryDelay = ProviderRetry.retryDelayMs(attempt, transient.retryAfterMs)
+            yield* events
+              .publish(SessionStatusEvent.Status, {
+                sessionID: session.id,
+                status: {
+                  type: "retry",
+                  attempt,
+                  message: transient.reason.message,
+                  next: Date.now() + retryDelay,
+                },
+              })
+              .pipe(Effect.ignore)
+            yield* restore(Effect.sleep(Duration.millis(retryDelay)))
+            yield* events
+              .publish(SessionStatusEvent.Status, {
+                sessionID: session.id,
+                status: { type: "busy" },
+              })
+              .pipe(Effect.ignore)
             attempt++
             sawProviderEvent = false
             stream = yield* restore(providerStream).pipe(Effect.exit)
@@ -973,9 +1036,31 @@ export const layer = Layer.effect(
             return yield* Effect.die(continueAfterOverflowCompaction(currentStep))
           if (overflowFailure) yield* publish(overflowFailure)
           const llmFailure = failure instanceof LLMError ? failure : undefined
+          const runtimeGuardStop = failure instanceof RuntimeGuards.Stop ? failure : undefined
+          // A raw transport failure after visible text/reasoning used to terminate the entire drain.
+          // Repeating the same request would duplicate the partial answer, so expose a distinct,
+          // safe continuation signal instead. Tool protocol output is excluded: even an incomplete
+          // call can encode a side effect, and automatically replaying around it is not safe.
+          const recoverableStreamFailure =
+            llmFailure !== undefined &&
+            publisher.hasAssistantStarted() &&
+            !sawToolProtocol &&
+            ProviderRetry.isTransientProviderFailure(llmFailure)
           if (llmFailure && !publisher.hasProviderError()) {
             yield* withPublication(publisher.failUnsettledTools("Provider did not return a tool result", true))
             yield* withPublication(publisher.failAssistant(llmFailure.reason.message))
+          }
+          if (runtimeGuardStop) {
+            yield* withPublication(publisher.failUnsettledTools(runtimeGuardStop.message))
+            yield* withPublication(publisher.failAssistant(runtimeGuardStop.message))
+            yield* events
+              .publish(SessionEvent.Synthetic, {
+                sessionID: session.id,
+                messageID: SessionMessage.ID.create(),
+                timestamp: yield* DateTime.now,
+                text: RuntimeGuards.notice(runtimeGuardStop),
+              })
+              .pipe(Effect.ignore)
           }
           if (stream._tag === "Failure" && Cause.hasInterrupts(stream.cause)) yield* FiberSet.clear(toolFibers)
           const settled = yield* restore(awaitToolFibers(toolFibers)).pipe(Effect.exit)
@@ -1048,7 +1133,7 @@ export const layer = Layer.effect(
             yield* withPublication(publisher.failUnsettledTools("Tool execution interrupted"))
           if (stream._tag === "Success" && !publisher.hasProviderError())
             yield* withPublication(publisher.failUnsettledTools("Provider did not return a tool result", true))
-          if (stream._tag === "Failure") return yield* Effect.failCause(stream.cause)
+          if (stream._tag === "Failure" && !recoverableStreamFailure) return yield* Effect.failCause(stream.cause)
           if (settled._tag === "Failure" && Cause.hasInterrupts(settled.cause))
             return yield* Effect.failCause(settled.cause)
           return {
@@ -1057,14 +1142,27 @@ export const layer = Layer.effect(
             finishReason,
             assistantMessageID: publisher.currentAssistantMessageID(),
             providerError: publisher.hasProviderError(),
+            recoverableStreamFailure,
           }
         }),
+      ).pipe(
+        Effect.onExit((exit) =>
+          events
+            .publish(SessionEvent.ProviderAttempt.Settled, {
+              sessionID: session.id,
+              timestamp: DateTime.makeUnsafe(Date.now()),
+              attemptID,
+              outcome: Exit.isSuccess(exit) ? "completed" : Cause.hasInterrupts(exit.cause) ? "interrupted" : "failed",
+            })
+            .pipe(Effect.ignore),
+        ),
       )
     }, Effect.scoped)
     type RunTurn = (
       sessionID: SessionSchema.ID,
       promotion: SessionInput.Delivery | undefined,
       step: number,
+      guardState: RuntimeGuards.DrainState,
     ) => Effect.Effect<
       {
         readonly needsContinuation: boolean
@@ -1072,33 +1170,34 @@ export const layer = Layer.effect(
         readonly finishReason?: FinishReason
         readonly assistantMessageID?: SessionMessage.ID
         readonly providerError: boolean
+        readonly recoverableStreamFailure: boolean
       },
       RunError
     >
 
-    const runAfterOverflowCompaction: RunTurn = Effect.fnUntraced(function* (sessionID, promotion, step) {
-      return yield* runTurnAttempt(sessionID, promotion, step).pipe(
+    const runAfterOverflowCompaction: RunTurn = Effect.fnUntraced(function* (sessionID, promotion, step, guardState) {
+      return yield* runTurnAttempt(sessionID, promotion, step, guardState).pipe(
         Effect.catchDefect(
           Effect.fnUntraced(function* (defect) {
             if (!(defect instanceof TurnTransitionError)) return yield* Effect.die(defect)
             if (defect.transition._tag === "ContinueAfterOverflowCompaction")
               return yield* Effect.die("Post-compaction provider attempt cannot recover another overflow")
             yield* Effect.yieldNow
-            return yield* runAfterOverflowCompaction(sessionID, undefined, defect.transition.step)
+            return yield* runAfterOverflowCompaction(sessionID, undefined, defect.transition.step, guardState)
           }),
         ),
       )
     })
 
-    const runTurn: RunTurn = Effect.fnUntraced(function* (sessionID, promotion, step) {
-      return yield* runTurnAttempt(sessionID, promotion, step, compaction.compactAfterOverflow).pipe(
+    const runTurn: RunTurn = Effect.fnUntraced(function* (sessionID, promotion, step, guardState) {
+      return yield* runTurnAttempt(sessionID, promotion, step, guardState, compaction.compactAfterOverflow).pipe(
         Effect.catchDefect(
           Effect.fnUntraced(function* (defect) {
             if (!(defect instanceof TurnTransitionError)) return yield* Effect.die(defect)
             yield* Effect.yieldNow
             if (defect.transition._tag === "ContinueAfterOverflowCompaction")
-              return yield* runAfterOverflowCompaction(sessionID, undefined, defect.transition.step)
-            return yield* runTurn(sessionID, undefined, defect.transition.step)
+              return yield* runAfterOverflowCompaction(sessionID, undefined, defect.transition.step, guardState)
+            return yield* runTurn(sessionID, undefined, defect.transition.step, guardState)
           }),
         ),
       )
@@ -1184,12 +1283,12 @@ export const layer = Layer.effect(
       const model = yield* models
         .resolve({ ...session, model: resolved.model as typeof session.model })
         .pipe(
-        Effect.catch((error: unknown) =>
-          notice(
-            `⚠️ Strict mode couldn't run — the session's model is unavailable (${error instanceof Error ? error.message : String(error)}).`,
-          ).pipe(Effect.as(undefined)),
-        ),
-      )
+          Effect.catch((error: unknown) =>
+            notice(
+              `⚠️ Strict mode couldn't run — the session's model is unavailable (${error instanceof Error ? error.message : String(error)}).`,
+            ).pipe(Effect.as(undefined)),
+          ),
+        )
       if (model === undefined) return "handled" as const
       // The engine's one-shot completion (the judgeCompletion idiom). The budget is per-CALL and comes
       // from ConfigStrict: execution steps need a whole non-trivial source file of headroom (jh.md §3
@@ -1575,9 +1674,9 @@ export const layer = Layer.effect(
             ),
           ),
         )
-      const hasSteer = yield* SessionInput.hasPending(db, input.sessionID, "steer")
-      const hasQueue = hasSteer ? false : yield* SessionInput.hasPending(db, input.sessionID, "queue")
-      if (!input.force && !hasSteer && !hasQueue) return
+      const pendingSteer = yield* SessionInput.hasPending(db, input.sessionID, "steer")
+      const pendingQueue = pendingSteer ? false : yield* SessionInput.hasPending(db, input.sessionID, "queue")
+      if (!input.force && !pendingSteer && !pendingQueue) return
       // B10: live control handoff — when a human operator has taken control, Nova does NOT
       // auto-respond. Input still QUEUES durably (nothing lost); it drains the moment control
       // is handed back to nova. Resolve via the config walk so a child inherits the parent's
@@ -1591,7 +1690,33 @@ export const layer = Layer.effect(
         })
         return
       }
-      yield* failInterruptedTools(input.sessionID)
+      const providerRecovery = (yield* store.get(input.sessionID))?.providerRecovery
+      if (providerRecovery) {
+        yield* events.publish(SessionEvent.Synthetic, {
+          sessionID: input.sessionID,
+          messageID: SessionMessage.ID.create(),
+          timestamp: yield* DateTime.now,
+          text:
+            "⚠️ NovaClaw detected a provider turn interrupted by process loss. The partial transcript was " +
+            "preserved. Any incomplete tool has an unknown outcome and was marked failed; inspect the current " +
+            "workspace or external system before repeating it.",
+        })
+        yield* SessionInput.steer(
+          db,
+          events,
+          input.sessionID,
+          "A previous provider turn was interrupted by process loss. Continue from durable projected history. " +
+            "Do not repeat any tool with an unknown outcome until you inspect and verify the target state.",
+        )
+      }
+      yield* failInterruptedTools(
+        input.sessionID,
+        providerRecovery
+          ? "Tool outcome unknown after process restart; inspect target state before retrying"
+          : "Tool execution interrupted",
+      )
+      const hasSteer = pendingSteer || providerRecovery !== undefined
+      const hasQueue = hasSteer ? false : pendingQueue
       // P14-minimal (jh-improve8 P3): the Strict-harness route. The effective strict config is the
       // global `config.strict` overlaid with the session's own override (the composer switch, resolved
       // through the config walk so children inherit) — it routes the drain through JhEngine.runTask
@@ -1637,6 +1762,7 @@ export const layer = Layer.effect(
       // a fresh drain (any new message) re-arms a cap-paused autonomous session.
       const driveState = SessionDrive.initialState(DateTime.toEpochMillis(yield* DateTime.now))
       const finishRecovery = FinishRecovery.initialState()
+      let streamRecoveries = 0
       // T1 per-session feature stances (the composer's Tuning toggles), resolved through the
       // config walk above: an explicit true/false on the chain wins; no stance = global config.
       // Only the ON/OFF is per-session — cadence/commands/model internals stay global.
@@ -1658,11 +1784,12 @@ export const layer = Layer.effect(
         (yield* store.get(input.sessionID).pipe(Effect.orElseSucceed(() => undefined)))?.result !== undefined
       let exitedMidDrain = false
       let finishRecoveryStopped = false
+      const runtimeGuardState = RuntimeGuards.initialDrainState()
       while (shouldRun) {
         let needsContinuation = true
         let step = 1
         while (needsContinuation) {
-          const result = yield* runTurn(input.sessionID, promotion, step)
+          const result = yield* runTurn(input.sessionID, promotion, step, runtimeGuardState)
           needsContinuation = result.needsContinuation
           step = result.step + 1
           promotion = "steer"
@@ -1684,6 +1811,34 @@ export const layer = Layer.effect(
           }
           const context = yield* getContext(input.sessionID)
           const cleanTerminal = result.assistantMessageID !== undefined && !result.providerError
+          if (result.recoverableStreamFailure) {
+            if (streamRecoveries === 0) {
+              streamRecoveries++
+              yield* Effect.logWarning("recovering interrupted provider stream", { sessionID: input.sessionID })
+              yield* SessionInput.steer(
+                db,
+                events,
+                input.sessionID,
+                "The provider connection ended after part of the previous response was already received. " +
+                  "Continue from the exact cutoff without repeating completed text or work. Re-read the partial " +
+                  "assistant turn before continuing.",
+              )
+            } else {
+              yield* Effect.logWarning("provider stream recovery exhausted", { sessionID: input.sessionID })
+              yield* events
+                .publish(SessionEvent.Synthetic, {
+                  sessionID: input.sessionID,
+                  messageID: SessionMessage.ID.create(),
+                  timestamp: yield* DateTime.now,
+                  text:
+                    "⚠️ The provider stream disconnected twice. The partial response was preserved, but NovaClaw " +
+                    "paused to avoid a retry loop. Check the model server and send `resume` to continue.",
+                })
+                .pipe(Effect.ignore)
+              finishRecoveryStopped = true
+              break
+            }
+          }
           const hasPendingUserInput =
             !result.needsContinuation &&
             ((yield* SessionInput.hasPending(db, input.sessionID, "steer")) ||

@@ -1,6 +1,7 @@
 import { Config } from "@/config/config"
 import { Config as ConfigV2 } from "@novaclaw/core/config"
 import { ConfigStoreWrite } from "@novaclaw/core/config-store-write"
+import { ConfigPublic } from "@novaclaw/core/config/public"
 import { GlobalBus, type GlobalEvent as GlobalBusEvent } from "@/bus/global"
 import { EffectBridge } from "@/effect/bridge"
 import { EventV2 } from "@novaclaw/core/event"
@@ -104,7 +105,7 @@ export const globalHandlers = HttpApiBuilder.group(RootHttpApi, "global", (handl
     // Settings UI reads exactly what the write router stored (the file no longer carries them).
     const configGet = Effect.fn("GlobalHttpApi.configGet")(function* () {
       const base = (yield* config.getGlobal()) as Record<string, unknown>
-      return Schema.decodeUnknownSync(ConfigV2.Info)(yield* ConfigStoreWrite.overlay(base))
+      return Schema.decodeUnknownSync(ConfigV2.Info)(ConfigPublic.redact(yield* ConfigStoreWrite.overlay(base)))
     })
 
     // Config→SQLite step 7→9: `updateConfig` patches route ENTIRELY into the per-subsystem
@@ -121,7 +122,7 @@ export const globalHandlers = HttpApiBuilder.group(RootHttpApi, "global", (handl
         bridge.fork(disposeAllInstancesAndEmitGlobalDisposed({ swallowErrors: true }))
       }
       const base = (yield* config.getGlobal()) as Record<string, unknown>
-      return Schema.decodeUnknownSync(ConfigV2.Info)(yield* ConfigStoreWrite.overlay(base))
+      return Schema.decodeUnknownSync(ConfigV2.Info)(ConfigPublic.redact(yield* ConfigStoreWrite.overlay(base)))
     })
 
     const dispose = Effect.fn("GlobalHttpApi.dispose")(function* () {

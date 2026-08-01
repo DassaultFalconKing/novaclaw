@@ -12,6 +12,7 @@ import { AbsolutePath } from "@novaclaw/core/schema"
 import { SessionExecution } from "@novaclaw/core/session/execution"
 import { SessionExecutionLocal } from "@novaclaw/core/session/execution/local"
 import { SessionRunner } from "@novaclaw/core/session/runner/index"
+import { RuntimeGuards } from "@novaclaw/core/session/runner/runtime-guards"
 import { SessionSchema } from "@novaclaw/core/session/schema"
 import { SessionStore } from "@novaclaw/core/session/store"
 import { location } from "./fixture/location"
@@ -27,10 +28,10 @@ const it = testEffect(AppNodeBuilder.build(LayerNode.group([Database.node, Event
 
 const sessionID = "ses_0123456789abcdefghijklmn" as SessionSchema.ID
 
-type Captured = { type: string; status: { type: string }; directory: string | undefined }
+type Captured = { type: string; status: { type: string; [key: string]: unknown }; directory: string | undefined }
 
 const harness = (input: {
-  run: (setResult: (value: string) => void) => Effect.Effect<void, never>
+  run: (setResult: (value: string) => void) => Effect.Effect<void, SessionRunner.RunError>
 }) =>
   Effect.gen(function* () {
     const ref = Location.Ref.make({ directory: AbsolutePath.make(process.cwd()) })
@@ -91,6 +92,35 @@ describe("SessionExecutionLocal status lifecycle", () => {
         const h = yield* harness({ run: () => Effect.die("boom") as Effect.Effect<void, never> })
         yield* h.exec.resume(sessionID).pipe(Effect.exit)
         expect(h.captured.map((c) => c.status.type)).toEqual(["busy", "idle"])
+      }),
+    ),
+  )
+
+  it.effect("publishes a durable operator-facing pause when a runtime guard stops the drain", () =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        const h = yield* harness({
+          run: () =>
+            Effect.fail(
+              new RuntimeGuards.Stop({
+                kind: "tool_calls_turn",
+                limit: 2,
+                observed: 3,
+                message: "Provider turn exceeded the 2 tool-call limit",
+              }),
+            ),
+        })
+        yield* h.exec.resume(sessionID).pipe(Effect.exit)
+        expect(h.captured.map((c) => c.status)).toEqual([
+          { type: "busy" },
+          {
+            type: "paused",
+            reason: "tool_calls_turn",
+            limit: 2,
+            observed: 3,
+            message: "Provider turn exceeded the 2 tool-call limit",
+          },
+        ])
       }),
     ),
   )

@@ -28,12 +28,14 @@ import { SettingsQualityV2 } from "./quality"
 import { SettingsRecoveryV2 } from "./recovery"
 import { SettingsMessengersV2 } from "./messengers"
 import { SettingsWebSearchV2 } from "./web-search"
+import { SettingsIntegrationsV2 } from "./integrations"
 
 // Tabs above Normal are hidden until unlocked (uix.md §6.4). Bootstrap/manage/reset stay universal:
 // General, Appearance, Shortcuts, Instances, Models, Recovery carry no entry (= Normal).
 const TAB_LEVELS: Record<string, ExpertiseLevel> = {
   "system-prompt": "advanced",
   tools: "advanced",
+  integrations: "advanced",
   strict: "advanced",
   // Web search "just works" for a normal user via the built-in; the override (own SearXNG) +
   // per-engine toggles are a power-user surface → Advanced (and therefore Developer too).
@@ -161,6 +163,12 @@ export const DialogSettings: Component<{
                         {language.t("settings.tools.title")}
                       </TabsV2.Trigger>
                     </Show>
+                    <Show when={tabVisible("integrations")}>
+                      <TabsV2.Trigger value="integrations">
+                        <Icon name="share" />
+                        {language.t("settings.integrations.title")}
+                      </TabsV2.Trigger>
+                    </Show>
                     <Show when={tabVisible("web-search")}>
                       <TabsV2.Trigger value="web-search">
                         <Icon name="magnifying-glass" />
@@ -246,6 +254,11 @@ export const DialogSettings: Component<{
         <Show when={tabVisible("tools")}>
           <TabsV2.Content value="tools" class="settings-v2-panel">
             <SettingsToolsV2 />
+          </TabsV2.Content>
+        </Show>
+        <Show when={tabVisible("integrations")}>
+          <TabsV2.Content value="integrations" class="settings-v2-panel">
+            <SettingsIntegrationsV2 />
           </TabsV2.Content>
         </Show>
         <Show when={tabVisible("web-search")}>

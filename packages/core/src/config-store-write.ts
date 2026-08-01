@@ -17,6 +17,7 @@ import { ReferenceConfigStore } from "./reference-config-store"
 import { SettingsConfigSeed } from "./settings-config-seed"
 import { SettingsConfigStore } from "./settings-config-store"
 import { SkillConfigStore } from "./skill-config-store"
+import { ConfigPublic } from "./config/public"
 
 // Config→SQLite step 7→9: the Settings-UI write router + read overlay. The app's
 // `updateConfig` contract is patch-MERGE over the effective config; this module routes each
@@ -102,7 +103,7 @@ export const apply = (patch: Config.Info) =>
     for (const key of SettingsConfigSeed.SETTINGS_KEYS) {
       const value = plain[key]
       if (value === undefined) continue
-      yield* settings.set(key, mergePatch(current[key], value))
+      yield* settings.set(key, mergePatch(current[key], key === "mcp" ? ConfigPublic.stripRedacted(value) : value))
       consumed.add(key)
     }
 

@@ -50,6 +50,8 @@ export const SETTINGS_KEYS = [
   "attachments",
   "tool_output",
   "mcp",
+  "provider_watchdog",
+  "runtime_guards",
   "compaction",
   "permissions",
   "persona",

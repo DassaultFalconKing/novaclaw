@@ -1,6 +1,7 @@
 import { Config } from "@/config/config"
 import { Config as ConfigV2 } from "@novaclaw/core/config"
 import { ConfigStoreWrite } from "@novaclaw/core/config-store-write"
+import { ConfigPublic } from "@novaclaw/core/config/public"
 import { ProviderCatalogResult } from "@/provider/catalog-result"
 import { Catalog } from "@novaclaw/core/catalog"
 import { LocationServiceMap } from "@novaclaw/core/location-services"
@@ -26,7 +27,7 @@ export const configHandlers = HttpApiBuilder.group(InstanceHttpApi, "config", (h
       // (`sync().data.config` — the composer's strict/tuning global defaults) read the same
       // values the runtime's synthetic document serves.
       const base = (yield* configSvc.get()) as Record<string, unknown>
-      return Schema.decodeUnknownSync(ConfigV2.Info)(yield* ConfigStoreWrite.overlay(base))
+      return Schema.decodeUnknownSync(ConfigV2.Info)(ConfigPublic.redact(yield* ConfigStoreWrite.overlay(base)))
     })
 
     // Config→SQLite step 9: settings are instance-wide, so the instance-scoped update routes
@@ -37,7 +38,7 @@ export const configHandlers = HttpApiBuilder.group(InstanceHttpApi, "config", (h
       const consumed = yield* ConfigStoreWrite.apply(ctx.payload)
       if (consumed.size > 0) yield* configSvc.invalidate()
       yield* markInstanceForDisposal(yield* InstanceState.context)
-      return ctx.payload
+      return Schema.decodeUnknownSync(ConfigV2.Info)(ConfigPublic.redact(Schema.encodeSync(ConfigV2.Info)(ctx.payload) as Record<string, unknown>))
     })
 
     // Connected providers come from the V2 `Catalog` (available = has

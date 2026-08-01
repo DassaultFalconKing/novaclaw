@@ -89,6 +89,24 @@ describe("HttpApiCodegen.generate", () => {
     )
   })
 
+  test("preserves an empty transport payload required by an imported API", () => {
+    const output = emitEffectImported(
+      compileContract(
+        api(
+          HttpApiEndpoint.get("duplicate", "/recipe/:slug/duplicate", {
+            params: { slug: Schema.String },
+            payload: {},
+            success: Schema.String,
+          }),
+        ),
+      ),
+      { module: "@example/api", api: "Api" },
+    )
+    const client = output.files.find((file) => file.path === "client.ts")?.content
+
+    expect(client).toContain('raw["duplicate"]({ params: { "slug": input["slug"] }, payload: {  } })')
+  })
+
   test("projects imported endpoint constants into a generated API", () => {
     const output = emitEffectImported(
       compileContract(

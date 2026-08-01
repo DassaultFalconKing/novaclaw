@@ -11,7 +11,7 @@ import type { SessionV2Info as Session } from "@novaclaw/sdk/v2/client"
 
 type Envelope = { type: string; properties?: unknown }
 
-export type ControlPatch = { sessionID: string; patch: Record<string, unknown> }
+export type ControlPatch = { sessionID: string; patch: Record<string, unknown>; providerAttemptID?: string }
 
 export function controlPatch(event: Envelope): ControlPatch | undefined {
   const props = (event.properties ?? {}) as Record<string, unknown>
@@ -50,6 +50,17 @@ export function controlPatch(event: Envelope): ControlPatch | undefined {
       return { sessionID, patch: { type: props.sessionType } }
     case "session.next.prompt-override.switched":
       return { sessionID, patch: { systemPromptOverride: props.override ?? undefined } }
+    case "session.next.completed":
+      return { sessionID, patch: { result: props.result } }
+    case "session.next.provider-attempt.started":
+      return { sessionID, patch: { providerRecovery: props.recovery } }
+    case "session.next.provider-attempt.settled":
+    case "session.next.provider-attempt.abandoned":
+      return {
+        sessionID,
+        patch: { providerRecovery: undefined },
+        providerAttemptID: typeof props.attemptID === "string" ? props.attemptID : undefined,
+      }
     case "session.next.moved": {
       const location = props.location as { directory?: string } | undefined
       if (!location?.directory) return undefined
@@ -66,7 +77,11 @@ export function controlPatch(event: Envelope): ControlPatch | undefined {
 }
 
 /** Apply a control patch onto a mutable session record draft (undefined values CLEAR fields). */
-export function applyControlPatch(draft: Session, patch: Record<string, unknown>) {
+export function applyControlPatch(draft: Session, patch: Record<string, unknown>, providerAttemptID?: string) {
+  if (providerAttemptID) {
+    const recovery = (draft as Record<string, unknown>).providerRecovery as { attemptID?: string } | undefined
+    if (recovery?.attemptID !== providerAttemptID) return
+  }
   for (const [key, value] of Object.entries(patch)) {
     if (value === undefined) delete (draft as Record<string, unknown>)[key]
     else (draft as Record<string, unknown>)[key] = value

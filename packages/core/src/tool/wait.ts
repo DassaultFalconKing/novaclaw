@@ -1,8 +1,10 @@
 export * as WaitTool from "./wait"
 
 import { ToolFailure } from "@novaclaw/llm"
-import { Duration, Effect, Layer, Schema } from "effect"
+import { Duration, Effect, Layer, Option, Schema, Stream } from "effect"
 import { makeLocationNode } from "../effect/app-node"
+import { EventV2 } from "../event"
+import { SessionEvent } from "../session/event"
 import { SessionStore } from "../session/store"
 import { SessionSchema } from "../session/schema"
 import { ToolRegistry } from "./registry"
@@ -11,14 +13,10 @@ import { Tools } from "./tools"
 
 // wait(sessionID) — join on a child session's completion (architecture.md step 5), the complement to
 // spawn/exit. Polls the child's `result` (set by exit() via the Completed event) until present or a
-// timeout. Poll rather than push keeps it simple + robust. `result === undefined` means not-yet-exited
-// (a never-exited row reads undefined; an exited session always has a string, "" if no summary), so the
-// check is unambiguous. Blocking within the turn is intended (like bash's long timeouts).
+// timeout. The durable aggregate stream closes the read/subscribe race and survives completion
+// before the wait call. A caller may only join its own direct child.
 
 export const name = "wait"
-const POLL_INTERVAL_MS = 2000
-const MAX_POLLS = 60 // ~2 minutes
-
 export const Input = Schema.Struct({
   sessionID: Schema.String.annotate({ description: "The child session id to wait for (returned by a prior spawn)." }),
 })
@@ -31,6 +29,7 @@ export const layer = Layer.effectDiscard(
   Effect.gen(function* () {
     const tools = yield* Tools.Service
     const store = yield* SessionStore.Service
+    const events = yield* EventV2.Service
     yield* tools
       .register({
         [name]: Tool.make({
@@ -42,26 +41,43 @@ export const layer = Layer.effectDiscard(
           structured: StructuredOutput,
           toStructuredOutput: ({ output }) => ({ completed: output.completed }),
           toModelOutput: ({ output }) => [{ type: "text", text: output.message }],
-          execute: (input) =>
+          execute: (input, context) =>
             Effect.gen(function* () {
               const childID = SessionSchema.ID.make(input.sessionID)
-              const poll = (remaining: number): Effect.Effect<Output> =>
-                Effect.gen(function* () {
-                  const child: SessionSchema.Info | undefined = yield* store.get(childID)
-                  if (child?.result !== undefined) {
-                    const result = typeof child.result === "string" ? child.result : JSON.stringify(child.result)
-                    return { completed: true, message: `Session ${childID} completed. Result: ${result}` }
-                  }
-                  if (remaining <= 0) return { completed: false, message: `Timed out waiting for session ${childID}.` }
-                  yield* Effect.sleep(Duration.millis(POLL_INTERVAL_MS))
-                  return yield* poll(remaining - 1)
-                })
-              return yield* poll(MAX_POLLS)
-            }).pipe(Effect.mapError(() => new ToolFailure({ message: "Unable to wait for session." }))),
+              const child: SessionSchema.Info | undefined = yield* store.get(childID)
+              if (!child)
+                return yield* Effect.fail(new ToolFailure({ message: `Unknown child session ${childID}.` }))
+              if (child.parentID !== context.sessionID)
+                return yield* Effect.fail(
+                  new ToolFailure({ message: `Session ${childID} is not a direct child of this Session.` }),
+                )
+              if (child.result !== undefined) return completedOutput(childID, child.result)
+              const completed = yield* events
+                .durable({ aggregateID: childID })
+                .pipe(
+                  Stream.filter((event) => event.type === SessionEvent.Completed.type),
+                  Stream.runHead,
+                  Effect.orDie,
+                  Effect.timeoutOption(Duration.minutes(2)),
+                )
+              if (Option.isNone(completed) || Option.isNone(completed.value))
+                return { completed: false, message: `Timed out waiting for session ${childID}.` }
+              const data = completed.value.value.data as { result?: unknown }
+              return completedOutput(childID, data.result)
+            }),
         }),
       })
       .pipe(Effect.orDie)
   }),
 )
 
-export const node = makeLocationNode({ name: "tool/wait", layer, deps: [ToolRegistry.node, SessionStore.node] })
+const completedOutput = (childID: SessionSchema.ID, value: unknown): Output => ({
+  completed: true,
+  message: `Session ${childID} completed. Result: ${typeof value === "string" ? value : JSON.stringify(value)}`,
+})
+
+export const node = makeLocationNode({
+  name: "tool/wait",
+  layer,
+  deps: [ToolRegistry.node, SessionStore.node, EventV2.node],
+})

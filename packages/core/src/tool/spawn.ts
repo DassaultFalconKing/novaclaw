@@ -4,6 +4,7 @@ import { ToolFailure } from "@novaclaw/llm"
 import { Effect, Layer, Schema } from "effect"
 import { makeLocationNode } from "../effect/app-node"
 import { AgentV2 } from "../agent"
+import { PermissionV2 } from "../permission"
 import { SessionSpawner } from "../session/spawner"
 import { ToolRegistry } from "./registry"
 import { Tool } from "./tool"
@@ -13,8 +14,8 @@ import { Tools } from "./tools"
 // the `SessionSpawner` seam: the child carries this session as its `parentID` (so it inherits
 // agent/model/system-prompt/permissions via `resolveSessionConfig` unless overridden) and starts on
 // the enqueued prompt when the coordinator next runs it. Guarded by the seam's fork-bomb depth cap.
-// TODO: gate behind a "may spawn" permission + flat max-children/rate quotas (todo 1K / Vision);
-// TODO: add `exit(result)` + `wait(childID)` (needs step 5's SessionCompleted) to complete the lifecycle.
+// The spawner owns durable depth/fan-out/rate quotas; this tool also asserts the explicit `spawn`
+// permission before creating anything. `exit(result)` + `wait(childID)` complete the lifecycle.
 
 export const name = "spawn"
 
@@ -43,6 +44,7 @@ export const layer = Layer.effectDiscard(
   Effect.gen(function* () {
     const tools = yield* Tools.Service
     const spawner = yield* SessionSpawner.Service
+    const permission = yield* PermissionV2.Service
     yield* tools
       .register({
         [name]: Tool.make({
@@ -59,14 +61,27 @@ export const layer = Layer.effectDiscard(
           }),
           toModelOutput: ({ output }) => [{ type: "text", text: output.message }],
           execute: (input, context) =>
-            spawner
-              .spawn({
-                parentID: context.sessionID,
-                text: input.prompt,
-                agent: input.agent ? AgentV2.ID.make(input.agent) : undefined,
-                systemPromptOverride: input.systemPromptOverride,
+            permission
+              .assert({
+                sessionID: context.sessionID,
+                agent: context.agent,
+                action: "spawn",
+                resources: [input.agent ?? "*"],
+                source: {
+                  type: "tool",
+                  messageID: context.assistantMessageID,
+                  callID: context.toolCallID,
+                },
               })
               .pipe(
+                Effect.andThen(
+                  spawner.spawn({
+                    parentID: context.sessionID,
+                    text: input.prompt,
+                    agent: input.agent ? AgentV2.ID.make(input.agent) : undefined,
+                    systemPromptOverride: input.systemPromptOverride,
+                  }),
+                ),
                 Effect.map(
                   (childID): Output => ({
                     childID,
@@ -97,5 +112,5 @@ export const layer = Layer.effectDiscard(
 export const node = makeLocationNode({
   name: "tool/spawn",
   layer,
-  deps: [ToolRegistry.node, SessionSpawner.node],
+  deps: [ToolRegistry.node, SessionSpawner.node, PermissionV2.node],
 })

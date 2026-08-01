@@ -335,7 +335,15 @@ function renderImportedEffectFiles(
       const request = (["params", "query", "headers", "payload"] as const)
         .flatMap((source) => {
           const fields = item.input.filter((field) => field.source === source)
-          if (fields.length === 0) return []
+          const hasTransportSchema =
+            source === "params"
+              ? item.params !== undefined
+              : source === "query"
+                ? item.query !== undefined
+                : source === "headers"
+                  ? item.headers !== undefined
+                  : item.payloads.length > 0
+          if (!hasTransportSchema) return []
           return [
             `${source}: { ${fields.map((field) => `${JSON.stringify(field.name)}: input${item.operation.inputMode === "optional" ? "?." : ""}[${JSON.stringify(field.name)}]`).join(", ")} }`,
           ]

@@ -11,10 +11,10 @@ import { RequiresLevel } from "@/context/expertise"
 // Providers tab into the merged Models tab so config portability survives the merge. Desktop-only:
 // window.api (the file pickers) is absent on web, so the buttons no-op there.
 //
-// Config→SQLite step 8: the export is the COMPLETE effective config — the server's /config view
+// Config→SQLite step 8: the export is the effective public config — the server's /config view
 // overlays every SQLite store (settings + folded provider/agent/command/reference layers +
-// skills/plugins), so this document is the full settings wire format an Import on another
-// instance re-seeds from. Only derived/transport noise is dropped.
+// skills/plugins). MCP transport secrets and endpoints are deliberately represented by
+// `<redacted>` placeholders; importing the file cannot overwrite secrets already stored locally.
 const EXPORT_DROP_KEYS = new Set(["$schema", "plugin_origins"])
 
 function generateConfigTemplate(current: Record<string, unknown>): string {

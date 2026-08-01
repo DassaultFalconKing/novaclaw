@@ -1,6 +1,6 @@
 export * as SessionInput from "./input"
 
-import { and, asc, eq, isNull, lte } from "drizzle-orm"
+import { and, asc, count, eq, isNull, lte } from "drizzle-orm"
 import { DateTime, Effect, Schema } from "effect"
 import { Admitted, Delivery } from "@novaclaw/schema/session-input"
 import type { Database } from "../database/database"
@@ -213,6 +213,19 @@ export const hasPending = Effect.fn("SessionInput.hasPending")(function* (
     .get()
     .pipe(Effect.orDie)
   return row !== undefined
+})
+
+export const countPending = Effect.fn("SessionInput.countPending")(function* (
+  db: DatabaseService,
+  sessionID: SessionSchema.ID,
+) {
+  const row = yield* db
+    .select({ count: count() })
+    .from(SessionInputTable)
+    .where(and(eq(SessionInputTable.session_id, sessionID), isNull(SessionInputTable.promoted_seq)))
+    .get()
+    .pipe(Effect.orDie)
+  return row?.count ?? 0
 })
 
 /**

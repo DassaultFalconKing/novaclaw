@@ -593,10 +593,29 @@ const verifyPartialFlushOnFailure = (kind: FragmentKind) =>
     const prompt = `Fail after ${kind}`
     const fixture = fragmentFixture(kind, fragmentID(kind, "partial"), ["Partial"])
     const failure = providerUnavailable()
+    requests.length = 0
     yield* session.prompt({ sessionID, prompt: Prompt.make({ text: prompt }), resume: false })
     responseStream = Stream.concat(Stream.fromIterable(fixture.partialEvents), Stream.fail(failure))
 
-    expect(yield* session.resume(sessionID).pipe(Effect.flip)).toBe(failure)
+    if (kind === "tool input") {
+      expect(yield* session.resume(sessionID).pipe(Effect.flip)).toBe(failure)
+      expect(requests).toHaveLength(1)
+      expect(yield* session.context(sessionID)).toMatchObject([
+        { type: "user", text: prompt },
+        {
+          type: "assistant",
+          finish: "error",
+          error: { type: "unknown", message: "Provider unavailable" },
+          content: [fixture.expectedContent],
+        },
+      ])
+      return
+    }
+
+    responses = [fragmentFixture("text", "text-recovered", [" continued"]).completeEvents]
+    yield* session.resume(sessionID)
+    expect(requests).toHaveLength(2)
+    expect(userTexts(requests[1]!)).toContainEqual(expect.stringContaining("provider connection ended"))
     expect(yield* session.context(sessionID)).toMatchObject([
       { type: "user", text: prompt },
       {
@@ -605,6 +624,8 @@ const verifyPartialFlushOnFailure = (kind: FragmentKind) =>
         error: { type: "unknown", message: "Provider unavailable" },
         content: [fixture.expectedContent],
       },
+      { type: "user", text: expect.stringContaining("provider connection ended") },
+      { type: "assistant", finish: "stop", content: [{ type: "text", text: " continued" }] },
     ])
   })
 
@@ -641,6 +662,41 @@ const verifyPartialFlushOnInterruption = (kind: FragmentKind) =>
   })
 
 describe("SessionRunnerLLM", () => {
+  it.effect("stops before executing a tool call beyond the provider-turn guard", () =>
+    Effect.gen(function* () {
+      yield* setup
+      const session = yield* SessionV2.Service
+      yield* session.prompt({ sessionID, prompt: Prompt.make({ text: "Attempt too many tools" }), resume: false })
+      requests.length = 0
+      executions.length = 0
+      response = [
+        LLMEvent.stepStart({ index: 0 }),
+        ...Array.from({ length: 33 }, (_, index) =>
+          LLMEvent.toolCall({ id: `guard-call-${index}`, name: "echo", input: { text: String(index) } }),
+        ),
+        LLMEvent.stepFinish({ index: 0, reason: "tool-calls" }),
+        LLMEvent.finish({ reason: "tool-calls" }),
+      ]
+
+      const failure = yield* session.resume(sessionID).pipe(Effect.flip)
+
+      expect(failure).toMatchObject({
+        _tag: "SessionRunner.RuntimeGuardStop",
+        kind: "tool_calls_turn",
+        limit: 32,
+        observed: 33,
+      })
+      expect(executions).toEqual(Array.from({ length: 32 }, (_, index) => String(index)))
+      expect(requests).toHaveLength(1)
+      expect(yield* session.context(sessionID)).toContainEqual(
+        expect.objectContaining({
+          type: "synthetic",
+          text: expect.stringContaining("configured limit is 32"),
+        }),
+      )
+    }),
+  )
+
   it.effect("continues one terminal length finish, then pauses with an explicit diagnostic", () =>
     Effect.gen(function* () {
       yield* setup
@@ -720,7 +776,7 @@ describe("SessionRunnerLLM", () => {
             Effect.sync(() => {
               contexts.push(context)
               return { answer: query.toUpperCase() }
-          }),
+            }),
         }),
       })
       yield* session.prompt({ sessionID, prompt: Prompt.make({ text: "Use application context" }), resume: false })
@@ -1693,9 +1749,7 @@ describe("SessionRunnerLLM", () => {
           LLMEvent.stepFinish({ index: 0, reason: "tool-calls" }),
           LLMEvent.finish({ reason: "tool-calls" }),
         ],
-        [
-          ...cleanStop(),
-        ],
+        [...cleanStop()],
       ]
       toolExecutionGate = yield* Deferred.make<void>()
       toolExecutionsStarted = yield* Deferred.make<void>()
@@ -2029,14 +2083,7 @@ describe("SessionRunnerLLM", () => {
       yield* session.prompt({ sessionID, prompt: Prompt.make({ text: "Start working" }), resume: false })
 
       requests.length = 0
-      responses = [
-        [
-          ...cleanStop(),
-        ],
-        [
-          ...cleanStop(),
-        ],
-      ]
+      responses = [[...cleanStop()], [...cleanStop()]]
       streamGate = yield* Deferred.make<void>()
       streamStarted = yield* Deferred.make<void>()
 
@@ -2075,12 +2122,8 @@ describe("SessionRunnerLLM", () => {
           LLMEvent.stepFinish({ index: 0, reason: "tool-calls" }),
           LLMEvent.finish({ reason: "tool-calls" }),
         ],
-        [
-          ...cleanStop(),
-        ],
-        [
-          ...cleanStop(),
-        ],
+        [...cleanStop()],
+        [...cleanStop()],
       ]
       streamGate = yield* Deferred.make<void>()
       streamStarted = yield* Deferred.make<void>()
@@ -2112,12 +2155,7 @@ describe("SessionRunnerLLM", () => {
       yield* session.prompt({ sessionID, prompt: Prompt.make({ text: "Interrupt current work" }), resume: false })
 
       requests.length = 0
-      responses = [
-        [],
-        [
-          ...cleanStop(),
-        ],
-      ]
+      responses = [[], [...cleanStop()]]
       streamGate = yield* Deferred.make<void>()
       streamStarted = yield* Deferred.make<void>()
 
@@ -2153,12 +2191,7 @@ describe("SessionRunnerLLM", () => {
       yield* session.prompt({ sessionID, prompt: Prompt.make({ text: "Interrupt current work" }), resume: false })
 
       requests.length = 0
-      responses = [
-        [],
-        [
-          ...cleanStop(),
-        ],
-      ]
+      responses = [[], [...cleanStop()]]
       streamGate = yield* Deferred.make<void>()
       streamStarted = yield* Deferred.make<void>()
 
@@ -2193,17 +2226,7 @@ describe("SessionRunnerLLM", () => {
       yield* session.prompt({ sessionID, prompt: Prompt.make({ text: "Start working" }), resume: false })
 
       requests.length = 0
-      responses = [
-        [
-          ...cleanStop(),
-        ],
-        [
-          ...cleanStop(),
-        ],
-        [
-          ...cleanStop(),
-        ],
-      ]
+      responses = [[...cleanStop()], [...cleanStop()], [...cleanStop()]]
       streamGate = yield* Deferred.make<void>()
       streamStarted = yield* Deferred.make<void>()
 
@@ -2236,14 +2259,7 @@ describe("SessionRunnerLLM", () => {
       })
 
       requests.length = 0
-      responses = [
-        [
-          ...cleanStop(),
-        ],
-        [
-          ...cleanStop(),
-        ],
-      ]
+      responses = [[...cleanStop()], [...cleanStop()]]
 
       yield* session.resume(sessionID)
 
@@ -2260,20 +2276,7 @@ describe("SessionRunnerLLM", () => {
       yield* session.prompt({ sessionID, prompt: Prompt.make({ text: "Start working" }), resume: false })
 
       requests.length = 0
-      responses = [
-        [
-          ...cleanStop(),
-        ],
-        [
-          ...cleanStop(),
-        ],
-        [
-          ...cleanStop(),
-        ],
-        [
-          ...cleanStop(),
-        ],
-      ]
+      responses = [[...cleanStop()], [...cleanStop()], [...cleanStop()], [...cleanStop()]]
       const firstGate = yield* Deferred.make<void>()
       const secondGate = yield* Deferred.make<void>()
       streamGate = firstGate
@@ -2317,14 +2320,7 @@ describe("SessionRunnerLLM", () => {
       yield* session.prompt({ sessionID, prompt: Prompt.make({ text: "Start working" }), resume: false })
 
       requests.length = 0
-      responses = [
-        [
-          ...cleanStop(),
-        ],
-        [
-          ...cleanStop(),
-        ],
-      ]
+      responses = [[...cleanStop()], [...cleanStop()]]
       streamGate = yield* Deferred.make<void>()
       streamStarted = yield* Deferred.make<void>()
 
@@ -2432,6 +2428,41 @@ describe("SessionRunnerLLM", () => {
           ],
         },
       ])
+    }),
+  )
+
+  it.effect("requires user authority before recovering a provider attempt left open by process loss", () =>
+    Effect.gen(function* () {
+      yield* setup
+      const session = yield* SessionV2.Service
+      const events = yield* EventV2.Service
+      yield* session.prompt({ sessionID, prompt: Prompt.make({ text: "Recover interrupted provider" }), resume: false })
+      yield* SessionInput.promoteSteers((yield* Database.Service).db, events, sessionID, Number.MAX_SAFE_INTEGER)
+      const oldAttemptID = EventV2.ID.create()
+      yield* events.publish(SessionEvent.ProviderAttempt.Started, {
+        sessionID,
+        timestamp: yield* DateTime.now,
+        recovery: {
+          attemptID: oldAttemptID,
+          assistantMessageID: SessionMessage.ID.create(),
+          model: { id: ModelV2.ID.make("fake-model"), providerID: ProviderV2.ID.make("fake") },
+          startedAt: yield* DateTime.now,
+          toolProtocol: false,
+        },
+      })
+
+      requests.length = 0
+      yield* (yield* SessionExecution.Service).wake(sessionID)
+      yield* Effect.yieldNow
+      expect(requests).toHaveLength(0)
+
+      response = [...cleanStop()]
+      yield* session.resume(sessionID)
+
+      expect(requests).toHaveLength(1)
+      expect(userTexts(requests[0]!)).toContain("Recover interrupted provider")
+      expect(userTexts(requests[0]!).join("\n")).toContain("process loss")
+      expect((yield* (yield* SessionStore.Service).get(sessionID))?.providerRecovery).toBeUndefined()
     }),
   )
 
@@ -2567,9 +2598,7 @@ describe("SessionRunnerLLM", () => {
       expect(yield* session.resume(sessionID).pipe(Effect.catchDefect(Effect.succeed))).toBe(defect)
       fail = false
       requests.length = 0
-      response = [
-        ...cleanStop(),
-      ]
+      response = [...cleanStop()]
 
       yield* (yield* SessionExecution.Service).wake(sessionID)
       while (requests.length === 0) yield* Effect.yieldNow
@@ -3087,9 +3116,7 @@ describe("SessionRunnerLLM", () => {
           LLMEvent.stepFinish({ index: 0, reason: "tool-calls" }),
           LLMEvent.finish({ reason: "tool-calls" }),
         ],
-        [
-          ...cleanStop(),
-        ],
+        [...cleanStop()],
       ]
       streamGate = yield* Deferred.make<void>()
       streamStarted = yield* Deferred.make<void>()
@@ -3405,7 +3432,7 @@ describe("SessionRunnerLLM", () => {
       verifyEphemeralDeltas(kind),
     )
 
-    it.effect(`durably closes partial ${kind} when the provider stream fails`, () => verifyPartialFlushOnFailure(kind))
+    it.effect(`durably handles partial ${kind} when the provider stream fails`, () => verifyPartialFlushOnFailure(kind))
 
     it.effect(`durably closes partial ${kind} when the provider stream is interrupted`, () =>
       verifyPartialFlushOnInterruption(kind),

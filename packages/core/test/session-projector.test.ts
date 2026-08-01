@@ -43,6 +43,79 @@ const assistantRow = (
 }
 
 describe("SessionProjector", () => {
+  it.effect("projects provider recovery and only settles the matching attempt", () =>
+    Effect.gen(function* () {
+      const { db } = yield* Database.Service
+      yield* db
+        .insert(SessionTable)
+        .values({
+          id: sessionID,
+          slug: "test",
+          directory: "/project",
+          title: "test",
+          version: "test",
+        })
+        .run()
+        .pipe(Effect.orDie)
+      const events = yield* EventV2.Service
+      const first = EventV2.ID.make("evt_attempt_first")
+      const second = EventV2.ID.make("evt_attempt_second")
+      const assistantMessageID = SessionMessage.ID.make("msg_provider_recovery")
+      const recovery = (attemptID: EventV2.ID) => ({
+        attemptID,
+        assistantMessageID,
+        model,
+        startedAt: created,
+        toolProtocol: false,
+      })
+
+      yield* events.publish(SessionEvent.ProviderAttempt.Started, {
+        sessionID,
+        timestamp: created,
+        recovery: recovery(first),
+      })
+      expect((yield* db.select().from(SessionTable).get())?.provider_recovery).toMatchObject({
+        attemptID: first,
+        toolProtocol: false,
+      })
+      yield* events.publish(SessionEvent.Step.Started, {
+        sessionID,
+        timestamp: created,
+        assistantMessageID,
+        agent: "build",
+        model,
+      })
+      yield* events.publish(SessionEvent.Tool.Input.Started, {
+        sessionID,
+        timestamp: created,
+        assistantMessageID,
+        callID: "call-1",
+        name: "bash",
+      })
+      expect((yield* db.select().from(SessionTable).get())?.provider_recovery?.toolProtocol).toBe(true)
+
+      yield* events.publish(SessionEvent.ProviderAttempt.Started, {
+        sessionID,
+        timestamp: DateTime.makeUnsafe(1),
+        recovery: recovery(second),
+      })
+      yield* events.publish(SessionEvent.ProviderAttempt.Settled, {
+        sessionID,
+        timestamp: DateTime.makeUnsafe(2),
+        attemptID: first,
+        outcome: "failed",
+      })
+      expect((yield* db.select().from(SessionTable).get())?.provider_recovery?.attemptID).toBe(second)
+      yield* events.publish(SessionEvent.ProviderAttempt.Settled, {
+        sessionID,
+        timestamp: DateTime.makeUnsafe(3),
+        attemptID: second,
+        outcome: "completed",
+      })
+      expect((yield* db.select().from(SessionTable).get())?.provider_recovery).toBeNull()
+    }),
+  )
+
   it.effect("projects staged, cleared, and committed reverts", () =>
     Effect.gen(function* () {
       const db = (yield* Database.Service).db

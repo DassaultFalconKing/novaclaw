@@ -509,6 +509,14 @@ export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handl
                     }),
                   ),
                 ),
+                Effect.catchTag("Session.PromptBacklogError", (error) =>
+                  Effect.fail(
+                    new ServiceUnavailableError({
+                      message: `Session inbox limit reached: ${error.pending}/${error.limit} pending inputs`,
+                      service: "session.prompt",
+                    }),
+                  ),
+                ),
               ),
           }
         }),

@@ -8,12 +8,15 @@ import { SessionSchema } from "../schema"
 
 type Input = {
   readonly sessionID: SessionSchema.ID
+  readonly assistantMessageID?: SessionMessage.ID
   readonly agent: string
   readonly model: ModelV2.Ref
   readonly snapshot?: string
 }
 
 const safe = (value: number | undefined) => Math.max(0, Number.isFinite(value) ? (value ?? 0) : 0)
+const STREAM_SNAPSHOT_CHARS = 512
+const STREAM_SNAPSHOT_MS = 500
 
 const tokens = (usage: Usage | undefined) => {
   const reasoning = safe(usage?.reasoningTokens)
@@ -73,7 +76,7 @@ export const createLLMEventPublisher = (events: EventV2.Interface, input: Input)
 
   const startAssistant = Effect.fnUntraced(function* () {
     if (assistantMessageID !== undefined) return assistantMessageID
-    assistantMessageID = SessionMessage.ID.create()
+    assistantMessageID = input.assistantMessageID ?? SessionMessage.ID.create()
     assistantActive = true
     yield* events.publish(SessionEvent.Step.Started, {
       ...input,
@@ -91,25 +94,37 @@ export const createLLMEventPublisher = (events: EventV2.Interface, input: Input)
   const fragments = (
     name: string,
     ended: (id: string, value: string, providerMetadata?: ProviderMetadata) => Effect.Effect<void>,
+    progress: (id: string, value: string) => Effect.Effect<void>,
   ) => {
-    const chunks = new Map<string, string[]>()
+    const chunks = new Map<
+      string,
+      { readonly values: string[]; length: number; snapshotLength: number; snapshotAt: number }
+    >()
     const start = (id: string) =>
       Effect.suspend(() => {
         if (chunks.has(id)) return Effect.die(`Duplicate ${name} start: ${id}`)
-        chunks.set(id, [])
+        chunks.set(id, { values: [], length: 0, snapshotLength: 0, snapshotAt: Date.now() })
         return Effect.void
       })
-    const append = (id: string, value: string) =>
-      Effect.suspend(() => {
-        const current = chunks.get(id)
-        if (!current) return Effect.die(`${name} delta before start: ${id}`)
-        current.push(value)
-        return Effect.void
-      })
+    const append = Effect.fnUntraced(function* (id: string, value: string) {
+      const current = chunks.get(id)
+      if (!current) return yield* Effect.die(`${name} delta before start: ${id}`)
+      current.values.push(value)
+      current.length += value.length
+      const now = Date.now()
+      if (
+        current.length - current.snapshotLength < STREAM_SNAPSHOT_CHARS &&
+        now - current.snapshotAt < STREAM_SNAPSHOT_MS
+      )
+        return
+      yield* progress(id, current.values.join(""))
+      current.snapshotLength = current.length
+      current.snapshotAt = now
+    })
     const end = Effect.fnUntraced(function* (id: string, providerMetadata?: ProviderMetadata) {
       const current = chunks.get(id)
       if (!current) return yield* Effect.die(`${name} end before start: ${id}`)
-      yield* ended(id, current.join(""), providerMetadata)
+      yield* ended(id, current.values.join(""), providerMetadata)
       chunks.delete(id)
     })
     const flush = Effect.fnUntraced(function* () {
@@ -118,42 +133,80 @@ export const createLLMEventPublisher = (events: EventV2.Interface, input: Input)
     return { start, append, end, flush }
   }
 
-  const text = fragments("text", (textID, value) =>
-    Effect.gen(function* () {
-      yield* events.publish(SessionEvent.Text.Ended, {
-        sessionID: input.sessionID,
-        assistantMessageID: yield* currentAssistantMessageID(),
-        timestamp: yield* timestamp,
-        textID,
-        text: value,
-      })
-    }),
+  const text = fragments(
+    "text",
+    (textID, value) =>
+      Effect.gen(function* () {
+        yield* events.publish(SessionEvent.Text.Ended, {
+          sessionID: input.sessionID,
+          assistantMessageID: yield* currentAssistantMessageID(),
+          timestamp: yield* timestamp,
+          textID,
+          text: value,
+        })
+      }),
+    (textID, value) =>
+      Effect.gen(function* () {
+        yield* events.publish(SessionEvent.Text.Progress, {
+          sessionID: input.sessionID,
+          assistantMessageID: yield* currentAssistantMessageID(),
+          timestamp: yield* timestamp,
+          textID,
+          text: value,
+        })
+      }),
   )
-  const reasoning = fragments("reasoning", (reasoningID, value, providerMetadata) =>
-    Effect.gen(function* () {
-      yield* events.publish(SessionEvent.Reasoning.Ended, {
-        sessionID: input.sessionID,
-        assistantMessageID: yield* currentAssistantMessageID(),
-        timestamp: yield* timestamp,
-        reasoningID,
-        text: value,
-        providerMetadata,
-      })
-    }),
+  const reasoning = fragments(
+    "reasoning",
+    (reasoningID, value, providerMetadata) =>
+      Effect.gen(function* () {
+        yield* events.publish(SessionEvent.Reasoning.Ended, {
+          sessionID: input.sessionID,
+          assistantMessageID: yield* currentAssistantMessageID(),
+          timestamp: yield* timestamp,
+          reasoningID,
+          text: value,
+          providerMetadata,
+        })
+      }),
+    (reasoningID, value) =>
+      Effect.gen(function* () {
+        yield* events.publish(SessionEvent.Reasoning.Progress, {
+          sessionID: input.sessionID,
+          assistantMessageID: yield* currentAssistantMessageID(),
+          timestamp: yield* timestamp,
+          reasoningID,
+          text: value,
+        })
+      }),
   )
-  const toolInput = fragments("tool input", (callID, value) =>
-    Effect.gen(function* () {
-      const tool = tools.get(callID)
-      if (!tool) return yield* Effect.die(`Tool input end before start: ${callID}`)
-      yield* events.publish(SessionEvent.Tool.Input.Ended, {
-        sessionID: input.sessionID,
-        timestamp: yield* timestamp,
-        assistantMessageID: tool.assistantMessageID,
-        callID,
-        text: value,
-      })
-      tool.inputEnded = true
-    }),
+  const toolInput = fragments(
+    "tool input",
+    (callID, value) =>
+      Effect.gen(function* () {
+        const tool = tools.get(callID)
+        if (!tool) return yield* Effect.die(`Tool input end before start: ${callID}`)
+        yield* events.publish(SessionEvent.Tool.Input.Ended, {
+          sessionID: input.sessionID,
+          timestamp: yield* timestamp,
+          assistantMessageID: tool.assistantMessageID,
+          callID,
+          text: value,
+        })
+        tool.inputEnded = true
+      }),
+    (callID, value) =>
+      Effect.gen(function* () {
+        const tool = tools.get(callID)
+        if (!tool) return yield* Effect.die(`Tool input progress before start: ${callID}`)
+        yield* events.publish(SessionEvent.Tool.Input.Progress, {
+          sessionID: input.sessionID,
+          timestamp: yield* timestamp,
+          assistantMessageID: tool.assistantMessageID,
+          callID,
+          text: value,
+        })
+      }),
   )
 
   const flushFragments = Effect.fnUntraced(function* () {

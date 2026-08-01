@@ -97,6 +97,22 @@ describe("server session", () => {
     expect(ctx.store.data.session_working("root")).toBe(false)
   })
 
+  test("folds runtime-guard pauses as settled operator-visible status", () => {
+    const ctx = setup({})
+    const status = {
+      type: "paused" as const,
+      reason: "tool_calls_turn" as const,
+      message: "Provider turn exceeded the tool-call limit",
+      limit: 32,
+      observed: 33,
+    }
+
+    ctx.store.apply({ type: "session.status", properties: { sessionID: "root", status } })
+
+    expect(ctx.store.data.session_status.root).toEqual(status)
+    expect(ctx.store.data.session_working("root")).toBe(false)
+  })
+
   test("preserves pinned session info under server-wide cache pressure", () => {
     const ctx = setup({})
     ctx.store.pin("active")

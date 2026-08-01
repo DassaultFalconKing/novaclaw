@@ -295,7 +295,7 @@ export function createServerSession(client: NovaclawClient, options?: { retry?: 
         "info",
         control.sessionID,
         produce((draft) => {
-          if (draft) applyControlPatch(draft, control.patch)
+          if (draft) applyControlPatch(draft, control.patch, control.providerAttemptID)
         }),
       )
       return
@@ -441,7 +441,11 @@ export function createServerSession(client: NovaclawClient, options?: { retry?: 
         return retry(() => client.v2.session.get({ sessionID })).then((result) => {
           if (generations.get(sessionID) !== active) return
           // V1-nuke slice C: the drain-end changes summary rides the native record (Session.Info.summary).
-          setData("session_diff", sessionID, reconcile(cleanDiffs([...(result.data?.data?.summary?.diffs ?? [])]), { key: "file" }))
+          setData(
+            "session_diff",
+            sessionID,
+            reconcile(cleanDiffs([...(result.data?.data?.summary?.diffs ?? [])]), { key: "file" }),
+          )
         })
       })
     },

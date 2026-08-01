@@ -12,7 +12,13 @@ type Deps = {
 }
 
 export function createMenu(deps: Deps) {
-  if (process.platform !== "darwin") return
+  // Linux/Windows use NovaClaw's HTML command surface. Leaving Electron's default application
+  // menu installed lets a bare Alt key reveal and focus it; Alt+Shift input-language switching
+  // can therefore pull focus out of the composer. Remove that unused native menu entirely.
+  if (process.platform !== "darwin") {
+    Menu.setApplicationMenu(null)
+    return
+  }
 
   const template = DESKTOP_MENU.map((menu) => {
     if (menu.role) return { role: nativeRole(menu.role) }

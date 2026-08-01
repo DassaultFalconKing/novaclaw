@@ -70,5 +70,6 @@ export const migrations = (
     import("./migration/20260725140000_add_web_host_budget"),
     import("./migration/20260725160000_add_session_thinking_budget"),
     import("./migration/20260725170000_add_session_edit_switches"),
+    import("./migration/20260801190243_add_session_provider_recovery"),
   ])
 ).map((module) => module.default) satisfies DatabaseMigration.Migration[]

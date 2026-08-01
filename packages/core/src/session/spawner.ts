@@ -1,6 +1,6 @@
 export * as SessionSpawner from "./spawner"
 
-import { count, eq } from "drizzle-orm"
+import { and, count, eq, gte, isNull } from "drizzle-orm"
 import { Context, Effect, Layer, Schema } from "effect"
 import { copySessionRecipes } from "../adhoc-tools"
 import { makeLocationNode } from "../effect/app-node"
@@ -17,6 +17,7 @@ import { SessionInput } from "./input"
 import { SessionSchema } from "./schema"
 import { SessionMessage } from "./message"
 import { Prompt } from "./prompt"
+import { SessionSpawnDispatch } from "./spawn-dispatch"
 
 // Location-scoped seam that lets a running session (a location tool) SPAWN a child session — the OS
 // `fork` (architecture.md Phase 3 step 6). It deliberately depends ONLY on the cycle-free primitives
@@ -75,10 +76,7 @@ export const layer = Layer.effect(
     const projects = yield* ProjectV2.Service
     const store = yield* SessionStore.Service
     const location = yield* Location.Service
-    // Spawn-rate ledger: parentID -> recent spawn timestamps within the rolling window. In-memory
-    // per process — a restart clears it, which is fine: the rate cap guards runaway LOOPS, not
-    // long-term accounting (the flat children cap below is the durable bound).
-    const rateLedger = new Map<string, number[]>()
+    const dispatch = yield* SessionSpawnDispatch.Service
     return Service.of({
       spawn: Effect.fn("SessionSpawner.spawn")(function* (input) {
         // Fork-bomb guards (K1): recursion depth + flat fan-out + spawn rate. Depth is a
@@ -98,20 +96,28 @@ export const layer = Layer.effect(
         const children = yield* db
           .select({ n: count() })
           .from(SessionTable)
-          .where(eq(SessionTable.parent_id, input.parentID))
+          .where(and(eq(SessionTable.parent_id, input.parentID), isNull(SessionTable.result)))
           .get()
           .pipe(Effect.orDie)
         if ((children?.n ?? 0) >= MAX_SPAWN_CHILDREN)
           return yield* Effect.fail(
             new SpawnLimitError({ reason: "children", depth: children?.n ?? 0, limit: MAX_SPAWN_CHILDREN }),
           )
-        const now = Date.now()
-        const recent = (rateLedger.get(input.parentID) ?? []).filter((t) => now - t < RATE_WINDOW_MS)
-        if (recent.length >= MAX_SPAWNS_PER_MINUTE)
-          return yield* Effect.fail(
-            new SpawnLimitError({ reason: "rate", depth: recent.length, limit: MAX_SPAWNS_PER_MINUTE }),
+        const recent = yield* db
+          .select({ n: count() })
+          .from(SessionTable)
+          .where(
+            and(
+              eq(SessionTable.parent_id, input.parentID),
+              gte(SessionTable.time_created, Date.now() - RATE_WINDOW_MS),
+            ),
           )
-        rateLedger.set(input.parentID, [...recent, now])
+          .get()
+          .pipe(Effect.orDie)
+        if ((recent?.n ?? 0) >= MAX_SPAWNS_PER_MINUTE)
+          return yield* Effect.fail(
+            new SpawnLimitError({ reason: "rate", depth: recent?.n ?? 0, limit: MAX_SPAWNS_PER_MINUTE }),
+          )
         const child = yield* createSessionRecord(
           { db, events, projects, store },
           {
@@ -138,6 +144,7 @@ export const layer = Layer.effect(
           prompt: Prompt.make({ text: input.text }),
           delivery: "queue",
         })
+        yield* dispatch.wake(child.id)
         return child.id
       }),
     })
@@ -147,5 +154,5 @@ export const layer = Layer.effect(
 export const node = makeLocationNode({
   service: Service,
   layer,
-  deps: [Database.node, EventV2.node, ProjectV2.node, SessionStore.node, Location.node],
+  deps: [Database.node, EventV2.node, ProjectV2.node, SessionStore.node, Location.node, SessionSpawnDispatch.node],
 })

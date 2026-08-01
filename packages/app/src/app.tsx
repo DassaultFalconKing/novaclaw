@@ -176,7 +176,11 @@ function ResolvedTargetSessionRoute() {
   // the scoped fallback below and lands in the ROOT error boundary (the fatal "Something went
   // wrong" screen a deleted/pruned chat used to cause — issues.md P2).
   const current = createMemo(() =>
-    selectSessionLineage(params.id, cached(), resolved.state === "errored" ? undefined : resolved()),
+    // `resolved()` suspends while a cache miss is loading. The route shell's keyed Suspense then
+    // keeps the outgoing Session tree alive while mounting the incoming one, which can leave two
+    // PromptInputs for the same Session in steady state. `latest` is non-suspending: the old route
+    // disposes immediately and this route renders as soon as lineage becomes available.
+    selectSessionLineage(params.id, cached(), resolved.state === "errored" ? undefined : resolved.latest),
   )
   const directory = createMemo(() => current()?.session.location.directory)
   const targetDirectory = () => directory()!
@@ -195,11 +199,7 @@ function ResolvedTargetSessionRoute() {
       <Show
         when={!!current() || resolved.state !== "errored"}
         fallback={
-          isSessionNotFoundError(resolved.error, params.id) ? (
-            <SessionGoneCard />
-          ) : (
-            <ErrorPage error={resolved.error} />
-          )
+          isSessionNotFoundError(resolved.error, params.id) ? <SessionGoneCard /> : <ErrorPage error={resolved.error} />
         }
       >
         <Show when={directory()}>

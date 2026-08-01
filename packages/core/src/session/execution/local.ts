@@ -1,4 +1,4 @@
-import { Cause, Effect, Layer } from "effect"
+import { Cause, Effect, Exit, Layer, Option } from "effect"
 import { SessionStatusEvent } from "@novaclaw/schema/session-status-event"
 import { Location } from "../../location"
 import { LocationServiceMap } from "../../location-service-map"
@@ -6,6 +6,7 @@ import { makeGlobalNode } from "../../effect/app-node"
 import { EventV2 } from "../../event"
 import { SessionRunCoordinator } from "../run-coordinator"
 import { SessionRunner } from "../runner"
+import { RuntimeGuards } from "../runner/runtime-guards"
 import { SessionSchema } from "../schema"
 import { SessionStore } from "../store"
 import { SessionExecution } from "../execution"
@@ -52,13 +53,26 @@ export const layer = Layer.effect(
               ? Effect.void
               : Effect.logError("Failed to drain Session", cause).pipe(Effect.annotateLogs({ sessionID })),
           ),
-          // `ensuring` so success, failure, AND interrupt (Stop) all settle back to idle —
-          // except a session that called exit(result) mid-drain: `exited` is the K1 terminal
-          // state and must not be stomped by a trailing idle.
-          Effect.ensuring(
+          // Every exit settles status. A runtime guard is an intentional paused state with a
+          // user-actionable reason, not a transport retry and not an idle success. A later explicit
+          // resume publishes busy first and can clear it normally.
+          Effect.onExit((exit) =>
             Effect.gen(function* () {
               const latest = yield* store.get(sessionID).pipe(Effect.orElseSucceed(() => undefined))
               if (latest?.result !== undefined) return
+              const failure = Exit.isFailure(exit)
+                ? Option.getOrUndefined(Cause.findErrorOption(exit.cause))
+                : undefined
+              if (failure instanceof RuntimeGuards.Stop) {
+                yield* publishStatus({
+                  type: "paused",
+                  reason: failure.kind,
+                  message: failure.message,
+                  limit: failure.limit,
+                  observed: failure.observed,
+                })
+                return
+              }
               yield* publishStatus({ type: "idle" })
             }),
           ),

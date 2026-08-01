@@ -8,12 +8,12 @@ import { SessionDrive } from "./drive"
 const t0 = 1_000_000
 
 describe("SessionDrive.decide", () => {
-  test("drives only self-declared auto-prompting / goal-oriented sessions", () => {
+  test("drives self-declared background sessions only", () => {
     const state = SessionDrive.initialState(t0)
     expect(SessionDrive.decide({ type: "auto-prompting" }, state, t0).kind).toBe("continue")
     expect(SessionDrive.decide({ type: "goal-oriented" }, state, t0).kind).toBe("continue")
     expect(SessionDrive.decide({ type: "interactive" }, state, t0).kind).toBe("stop")
-    expect(SessionDrive.decide({ type: "sub-agent" }, state, t0).kind).toBe("stop")
+    expect(SessionDrive.decide({ type: "sub-agent" }, state, t0).kind).toBe("continue")
     expect(SessionDrive.decide({}, state, t0).kind).toBe("stop") // undefined type = interactive default
     expect(SessionDrive.decide(undefined, state, t0).kind).toBe("stop") // missing row = never drive
   })
@@ -60,5 +60,14 @@ describe("SessionDrive.decide", () => {
     expect(goal.message).toContain("`exit` tool")
     expect(goal.message).toContain("goal")
     expect(auto.message).not.toBe(goal.message)
+  })
+
+  test("tells sub-agents that exit is the durable parent handoff", () => {
+    const decision = SessionDrive.decide({ type: "sub-agent" }, SessionDrive.initialState(t0), t0)
+    expect(decision.kind).toBe("continue")
+    if (decision.kind === "continue") {
+      expect(decision.message).toContain("parent Session")
+      expect(decision.message).toContain("`exit`")
+    }
   })
 })

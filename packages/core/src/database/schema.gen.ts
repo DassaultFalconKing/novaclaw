@@ -364,6 +364,7 @@ export default {
           \`thinking_budget\` integer,
           \`surgical_edits\` integer,
           \`ask_before_changes\` integer,
+          \`provider_recovery\` text,
           \`result\` text,
           \`time_created\` integer NOT NULL,
           \`time_updated\` integer NOT NULL,

@@ -11,6 +11,9 @@ import { Timestamps } from "../database/schema.sql"
 import type { SystemContext } from "../system-context/index"
 import { AgentV2 } from "../agent"
 import type { Revert } from "@novaclaw/schema/revert"
+import type { SessionProviderRecovery } from "@novaclaw/schema/session-provider-recovery"
+
+type SessionProviderRecoveryRow = Omit<SessionProviderRecovery.Info, "startedAt"> & { readonly startedAt: number }
 
 type SessionMessageData = Omit<(typeof SessionMessage.Message)["Encoded"], "type" | "id">
 
@@ -61,15 +64,13 @@ export const SessionTable = sqliteTable(
     thinking_budget: integer({ mode: "boolean" }),
     surgical_edits: integer({ mode: "boolean" }),
     ask_before_changes: integer({ mode: "boolean" }),
+    provider_recovery: text({ mode: "json" }).$type<SessionProviderRecoveryRow>(),
     result: text({ mode: "json" }).$type<unknown>(),
     ...Timestamps,
     time_compacting: integer(),
     time_archived: integer(),
   },
-  (table) => [
-    index("session_workspace_idx").on(table.workspace_id),
-    index("session_parent_idx").on(table.parent_id),
-  ],
+  (table) => [index("session_workspace_idx").on(table.workspace_id), index("session_parent_idx").on(table.parent_id)],
 )
 
 export const TodoTable = sqliteTable(

@@ -1,4 +1,4 @@
-import type { SessionMessageUser, V2Event } from "@novaclaw/sdk/v2/client"
+import type { SessionMessageUser, SessionStatus, V2Event } from "@novaclaw/sdk/v2/client"
 import { useDialog } from "@novaclaw/ui/context/dialog"
 import { createQuery, skipToken, useMutation, useQueryClient } from "@tanstack/solid-query"
 import {
@@ -76,6 +76,8 @@ import { promptFromUserMessage } from "@/utils/prompt"
 import { formatServerError } from "@/utils/server-errors"
 import { legacySessionHref, requireServerKey, sessionHref } from "@/utils/session-route"
 import { createSessionOwnership } from "./session/session-ownership"
+import { SessionProviderRecoveryDock } from "./session/composer/session-provider-recovery-dock"
+import { SessionRuntimeGuardDock } from "./session/composer/session-runtime-guard-dock"
 
 type FollowupItem = FollowupDraft & { id: string }
 type FollowupEdit = Pick<FollowupItem, "id" | "prompt" | "context">
@@ -117,6 +119,10 @@ export default function Page() {
   const serverSync = useServerSync()
   const layout = useLayout()
   const local = useLocal()
+  const pausedStatus = () => {
+    const status = params.id ? sync().data.session_status[params.id] : undefined
+    return status?.type === "paused" ? (status as Extract<SessionStatus, { type: "paused" }>) : undefined
+  }
   const file = useFile()
   const sync = useSync()
   const queryClient = useQueryClient()
@@ -245,6 +251,7 @@ export default function Page() {
   }
 
   const info = createMemo(() => (params.id ? sync().session.get(params.id) : undefined))
+  const sessionWorking = createMemo(() => (params.id ? sync().data.session_working(params.id) : false))
   const isChildSession = createMemo(() => !!info()?.parentID)
   const diffs = createMemo(() => (params.id ? list(sync().data.session_diff[params.id]) : []))
   // T3 (entities.md): review affordances gate on VCS data, not a project entity.
@@ -1614,7 +1621,6 @@ export default function Page() {
     if (fillFrame !== undefined) cancelAnimationFrame(fillFrame)
   })
 
-
   const composerRegion = () => {
     const controller = createSessionComposerRegionController({
       state: composer,
@@ -1734,6 +1740,12 @@ export default function Page() {
               </Switch>
             </div>
 
+            <Show when={params.id && !sessionWorking() ? info()?.providerRecovery : undefined} keyed>
+              {(recovery) => <SessionProviderRecoveryDock sessionID={params.id!} recovery={recovery} />}
+            </Show>
+            <Show when={pausedStatus()} keyed>
+              {(status) => <SessionRuntimeGuardDock sessionID={params.id!} status={status} />}
+            </Show>
             <Show when={params.id || !newSessionDesign()}>{(_) => composerRegion()}</Show>
           </div>
 
