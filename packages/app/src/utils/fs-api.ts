@@ -31,12 +31,14 @@ async function call<T>(
   route: string,
   directory: string,
   body?: unknown,
+  timeoutMs?: number,
 ): Promise<T> {
   const url = new URL(route, server.url.endsWith("/") ? server.url : `${server.url}/`)
   url.searchParams.set("directory", directory)
   const res = await fetch(url, {
     method,
     headers: headersFor(server),
+    ...(timeoutMs === undefined ? {} : { signal: AbortSignal.timeout(timeoutMs) }),
     ...(body === undefined ? {} : { body: JSON.stringify(body) }),
   })
   if (!res.ok) throw new Error(`${method} ${route} failed: ${res.status} ${await res.text().catch(() => "")}`)
@@ -91,12 +93,19 @@ export function providerProbe(
     authStyle?: "bearer" | "anthropic"
   },
 ) {
-  return call<ProbeResult>(server, "POST", `provider/${encodeURIComponent(input.providerID)}/probe`, input.directory, {
-    ...(input.modelID === undefined ? {} : { modelID: input.modelID }),
-    ...(input.baseURL === undefined ? {} : { baseURL: input.baseURL }),
-    ...(input.apiKey === undefined ? {} : { apiKey: input.apiKey }),
-    ...(input.authStyle === undefined ? {} : { authStyle: input.authStyle }),
-  })
+  return call<ProbeResult>(
+    server,
+    "POST",
+    `provider/${encodeURIComponent(input.providerID)}/probe`,
+    input.directory,
+    {
+      ...(input.modelID === undefined ? {} : { modelID: input.modelID }),
+      ...(input.baseURL === undefined ? {} : { baseURL: input.baseURL }),
+      ...(input.apiKey === undefined ? {} : { apiKey: input.apiKey }),
+      ...(input.authStyle === undefined ? {} : { authStyle: input.authStyle }),
+    },
+    7_000,
+  )
 }
 
 // Provider-import presets (Settings → Models → Add models): the server-merged view of the
@@ -113,7 +122,7 @@ export interface ProviderPreset {
 }
 
 export function providerPresets(server: ServerConnection.HttpBase, input: { directory: string }) {
-  return call<Record<string, ProviderPreset>>(server, "GET", "provider/presets", input.directory)
+  return call<Record<string, ProviderPreset>>(server, "GET", "provider/presets", input.directory, undefined, 5_000)
 }
 
 // B11 — the bundled-shell substrate (status + provisioner). Provisioning downloads

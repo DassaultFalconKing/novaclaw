@@ -1,4 +1,4 @@
-import { Component, For, Show, createResource, createSignal } from "solid-js"
+import { Component, For, Show, createSignal, onMount } from "solid-js"
 import { createStore } from "solid-js/store"
 import { Dialog } from "@novaclaw/ui/v2/dialog-v2"
 import { ButtonV2 } from "@novaclaw/ui/v2/button-v2"
@@ -43,10 +43,15 @@ export const DialogNewModel: Component<{
   const t = (key: string, vars?: Record<string, string | number | boolean>) =>
     language.t(key as Parameters<typeof language.t>[0], vars as never)
 
-  const [presets] = createResource(
-    () => providerPresets(props.http, { directory: props.directory }).catch(() => ({}) as Record<string, ProviderPreset>),
-    { initialValue: {} as Record<string, ProviderPreset> },
-  )
+  // Do not create a Resource while dialog.push() is committing inside a Solid transition:
+  // a stalled server would keep the whole dialog invisible. The custom endpoint card is usable
+  // immediately; provider presets arrive independently after mount.
+  const [presets, setPresets] = createSignal<Record<string, ProviderPreset>>({})
+  onMount(() => {
+    void providerPresets(props.http, { directory: props.directory })
+      .then(setPresets)
+      .catch(() => setPresets({}))
+  })
 
   const [step, setStep] = createSignal<"pick" | "connect" | "choose">("pick")
   // undefined = nothing chosen yet; "custom" = the free-form endpoint card.
@@ -65,7 +70,7 @@ export const DialogNewModel: Component<{
     }
   const preset = (): ProviderPreset | undefined => {
     const id = presetID()
-    return id === undefined || id === "custom" ? undefined : presets.latest[id]
+    return id === undefined || id === "custom" ? undefined : presets()[id]
   }
   const saved = (): SavedProvider | undefined => config().providers?.[form.providerID.trim()]
   const savedKey = () => typeof saved()?.request?.body?.apiKey === "string" && !!saved()?.request?.body?.apiKey
@@ -74,7 +79,7 @@ export const DialogNewModel: Component<{
   const canDiscover = () => !!form.baseURL.trim() && validID() && !probing()
   const pickedIDs = () => models().filter((id) => picked[id])
   const visiblePresets = () =>
-    Object.entries(presets.latest).filter(([, entry]) => entry.hidden !== true)
+    Object.entries(presets()).filter(([, entry]) => entry.hidden !== true)
 
   const statusMessage = (r: ProbeResult): string => {
     switch (r.status) {
