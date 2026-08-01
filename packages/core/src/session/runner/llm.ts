@@ -1392,10 +1392,7 @@ export const layer = Layer.effect(
         // attempt whose run completes DONE) wins and its changes are applied back; losers are deleted.
         // Measured (12 rig races): ~2× per-wall success; contention notes in jh-improve11.md.
         // A RESUMED run is always single-attempt: the saved tree describes the LIVE folder, not a fork.
-        let attempts =
-          resumeState !== undefined
-            ? 1
-            : Math.max(1, Math.min(SessionStrict.MAX_ATTEMPTS, Math.floor(strict.attempts ?? 1)))
+        let attempts = SessionStrict.attemptCount(strict, resumeState !== undefined)
         let baseline: ReadonlyMap<string, string> | undefined
         let forks: string[] = []
         if (attempts > 1) {

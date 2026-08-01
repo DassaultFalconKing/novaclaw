@@ -14,14 +14,13 @@ export type ComposerStrictControlState = {
 }
 
 /**
- * The per-chat Strict switch (jh.md): OFF → click opens a small ask — how many agents race and the
- * time budget — then enables; ON → click turns it off directly. Enabling also raises the permission
+ * The per-chat Strict switch (jh.md): OFF → click asks for the time budget, then enables;
+ * ON → click turns it off directly. Enabling also raises the permission
  * mode to Bypass (the harness's autonomous floor) — the popover says so before the user commits.
  */
 export function ComposerStrictControl(props: { state: ComposerStrictControlState }) {
   const language = useLanguage()
   const [open, setOpen] = createSignal(false)
-  const [attempts, setAttempts] = createSignal("")
   const [wall, setWall] = createSignal("")
   const enabled = () => props.state.current.enabled === true
   const close = () => {
@@ -29,11 +28,9 @@ export function ComposerStrictControl(props: { state: ComposerStrictControlState
     props.state.onClose()
   }
   const enable = () => {
-    const racers = Number.parseInt(attempts(), 10)
     const minutes = Number.parseInt(wall(), 10)
     props.state.set({
       enabled: true,
-      attempts: Number.isFinite(racers) && racers > 1 ? Math.min(racers, 8) : undefined,
       wallMinutes: Number.isFinite(minutes) && minutes > 0 ? Math.min(minutes, 480) : undefined,
     })
     close()
@@ -49,11 +46,6 @@ export function ComposerStrictControl(props: { state: ComposerStrictControlState
           return
         }
         if (next) {
-          setAttempts(
-            props.state.current.attempts && props.state.current.attempts > 1
-              ? String(props.state.current.attempts)
-              : "",
-          )
           setWall(props.state.current.wallMinutes ? String(props.state.current.wallMinutes) : "")
         }
         setOpen(next)
@@ -97,27 +89,9 @@ export function ComposerStrictControl(props: { state: ComposerStrictControlState
             </span>
           </div>
           <label class="flex items-center justify-between gap-3">
-            <span class="text-[13px] text-v2-text-text-base">{language.t("prompt.strict.popover.attempts")}</span>
-            <div class="w-[90px]">
-              {/* TextInputV2 carries a fixed 280px default width — force it into the row's sizer
-                  or it overflows the w-80 popover (same !w-full override the settings forms use). */}
-              <TextInputV2
-                type="number"
-                appearance="base"
-                class="!w-full"
-                min="1"
-                max="8"
-                step="1"
-                placeholder="1"
-                value={attempts()}
-                onInput={(event) => setAttempts(event.currentTarget.value)}
-                aria-label={language.t("prompt.strict.popover.attempts")}
-              />
-            </div>
-          </label>
-          <label class="flex items-center justify-between gap-3">
             <span class="text-[13px] text-v2-text-text-base">{language.t("prompt.strict.popover.wallMinutes")}</span>
             <div class="w-[90px]">
+              {/* TextInputV2 carries a fixed 280px default width — force it into the row's sizer. */}
               <TextInputV2
                 type="number"
                 appearance="base"

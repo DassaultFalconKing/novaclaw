@@ -30,6 +30,14 @@ describe("SessionStrict.flagsFor", () => {
   })
 })
 
+describe("SessionStrict.attemptCount", () => {
+  test("serializes legacy racing requests for one-slot local providers", () => {
+    expect(SessionStrict.attemptCount({}, false)).toBe(1)
+    expect(SessionStrict.attemptCount({ attempts: 8 }, false)).toBe(1)
+    expect(SessionStrict.attemptCount({ attempts: 8 }, true)).toBe(1)
+  })
+})
+
 describe("SessionStrict.milestone", () => {
   const seq = (entry: JhLog.Entry): JhLog.Sequenced => ({ ...entry, seq: 1 }) as JhLog.Sequenced
   test("phase-level structure events surface; leaf-level ones stay quiet", () => {

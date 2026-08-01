@@ -32,7 +32,7 @@ export const Info = Schema.Struct({
   }),
   attempts: Schema.optional(Schema.Number).annotate({
     description:
-      "Best-of-N racing (jh.md §14.2): run N isolated attempts on FORKED copies of the workspace and keep the first verified winner (1 = off, max 8). Explicit opt-in — costs ~N× compute; the Spark's bandwidth-bound decoding makes concurrent attempts nearly free capacity (default: 1)",
+      "Legacy compatibility field. Strict execution is serialized to one attempt so one-slot local model servers cannot be saturated (default and maximum: 1)",
   }),
   // The two per-call token budgets (owner, 2026-07-16). These bound GENERATION, not context: a local
   // model is typically served with a 128k context, but each call still needs room to FINISH. They are

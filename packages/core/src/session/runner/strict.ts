@@ -50,7 +50,13 @@ const positive = (n: number | undefined): number | undefined =>
 // bounds, racing degrades to a single attempt with a notice (never a silent cap).
 export const MAX_FORK_BYTES = 256 * 1024 * 1024
 export const MAX_FORK_FILES = 5000
-export const MAX_ATTEMPTS = 8
+export const MAX_ATTEMPTS = 1
+
+/** Strict shares the same local model device as normal turns. Keep one provider call in flight;
+ * legacy `attempts` values remain readable but never fan out onto a one-slot backend. */
+export function attemptCount(_strict: ConfigStrict.Info, _resuming: boolean): number {
+  return MAX_ATTEMPTS
+}
 // The workspace render is the model's working set — a session cwd can be a whole user project, so the
 // listing is bounded (most-recently-modified first; the tail entry names how many files were omitted).
 export const FILE_LIST_CAP = 24
