@@ -6,7 +6,7 @@
 
 ## Результат
 
-Локальный отчёт агента подтверждён по сохранённой сессии, SQLite и журналам desktop-приложения. Исправлены одиннадцать связанных пользовательских симптомов, reliability-разрывов и интеграционных рисков:
+Локальный отчёт агента подтверждён по сохранённой сессии, SQLite и журналам desktop-приложения. Исправлены двенадцать связанных пользовательских симптомов, reliability-разрывов и интеграционных рисков:
 
 1. В Settings добавлен раздел **Integrations** для постоянной настройки MCP-серверов.
 2. Там же добавлено подключение и отключение источников skills (локальный путь или URL).
@@ -19,6 +19,7 @@
 9. Добавлены runtime guard caps для tool calls за turn/drain, durable inbox backlog и объёма provider stream; срабатывание переводит Session в видимый `paused`, не повторяя tools.
 10. Фоновый `/sub-agent` переведён на единый durable child-Session lifecycle: admission → wake → self-drive → `exit(result)` → event-driven `wait` и live completion projection.
 11. Закрыты утечки MCP secrets через config/export/logs, заработал startup timeout и connect endpoint теперь подтверждает фактическое состояние, а не только отсутствие исключения.
+12. **Add Model** больше не блокируется ожидающим backend: диалог монтируется до загрузки presets, а presets/probe ограничены клиентскими дедлайнами 5/7 секунд.
 
 ## Локализация исходного отчёта
 
@@ -47,6 +48,7 @@
 | runaway tool/stream/inbox | Не было явных верхних границ на локальное выполнение tools, накопление input и streamed bytes | runtime config, runner, prompt admission, Session status | Конфигурируемые caps с безопасными defaults; превышающий tool не выполняется, exact input retry сохраняет идемпотентность, UI показывает причину `paused` |
 | Child Session не запускался до результата | Spawn создавал durable child, но не будил execution; `/sub-agent` не self-drive-ился, `wait` polling-ил без ownership | `session/spawner.ts`, `spawn-dispatch.ts`, `tool/spawn.ts`, `tool/wait.ts`, runner drive | Wake после durable admission, startup wake только eligible inputs, явный spawn permission, durable quotas, self-drive до `exit`, прямое владение parent→child и event-driven wait |
 | MCP secrets/timeout/status | Config HTTP/export возвращал runtime credentials; log notification мог писать произвольный payload; startup timeout игнорировался; connect всегда отвечал `true` | public config projection, ConfigStoreWrite, MCP runtime/handlers | Значения env/headers/OAuth secret заменяются на `<redacted>`, placeholder не затирает secret при round-trip, payload не логируется, startup fallback соблюдается, connect возвращает реальный status |
+| `Add Model` выглядел зависшим | Диалог создавал tracked presets Resource внутри `dialog.push()` transition; зависший HTTP удерживал commit, а frontend probe не имел собственного deadline | `dialog-new-model.tsx`, `fs-api.ts` | Custom endpoint отображается сразу, presets загружаются после mount; presets/probe прерываются через 5/7 секунд и возвращают управляемую ошибку |
 
 ## Границы восстановления stream
 
@@ -71,6 +73,8 @@
 ## Изменённые поверхности
 
 - `packages/app/src/components/settings-v2/integrations.tsx`
+- `packages/app/src/components/settings-v2/dialog-new-model.tsx`
+- `packages/app/src/utils/fs-api.ts`
 - `packages/app/src/components/settings-v2/integrations-model.ts`
 - `packages/app/src/components/settings-v2/integrations.test.ts`
 - `packages/app/src/components/settings-v2/dialog-settings-v2.tsx`
@@ -115,7 +119,9 @@
 | Inbox cap + exact retry                       | pass |
 | Local execution `paused` projection           | pass |
 | App Session/control folds                     | 16 pass, 0 fail |
+| Add Model responsiveness regression           | 7 pass, 0 fail |
 | MCP lifecycle, headers, timeout               | 36 pass, 0 fail |
+| PII Parser portable node-lint gate            | typecheck 18/18; oxlint 0 errors |
 | Client + legacy SDK regeneration              | pass |
 | Migration drift check                         | pass; no schema changes pending |
 | App production build                          | pass; entry 743111 bytes, max chunk 978306 bytes |
@@ -137,10 +143,10 @@
 
 | Файл                                     |    Размер | SHA-256                                                            |
 | ---------------------------------------- | --------: | ------------------------------------------------------------------ |
-| `novaclaw-desktop-linux-x86_64.AppImage` | 181383415 | `04e4b39b5a53dc0b19e2c5a8a6a1ae2d31facd3e58e60b5cc71836ad116b33a2` |
-| `novaclaw-desktop-linux-amd64.deb`       | 138916980 | `1fed3fe41350d16b279ce08df98577257e5f18d5f39200bbdd63201f5a49221d` |
-| `novaclaw-desktop-linux-x86_64.rpm`      | 113473055 | `5de602689d5df05d366a1cc155b096b5e72840f11cad72403831f54ef5a0f3dd` |
-| `novaclaw-dev-0.1.0-x64.pkg.tar.zst`     | 166308348 | `7362752814d34a551b7e4c2226051fa72f872a8b0b56f24be93020c62100f256` |
+| `novaclaw-desktop-linux-x86_64.AppImage` | 181387823 | `50463d5ae16ed2a636d71a08177952c2fc2bb91b989d778c2d7bcd9257f22bf8` |
+| `novaclaw-desktop-linux-amd64.deb`       | 138918444 | `ba7a8c6dc67ca03365b51fb6dd5e43f6540d628ee8e386487715b020f2419d15` |
+| `novaclaw-desktop-linux-x86_64.rpm`      | 113470159 | `2c43379de26cea4d40f55c6a64976e78a27589046eaa0479f332567382fecece` |
+| `novaclaw-dev-0.1.0-x64.pkg.tar.zst`     | 166294099 | `e40cc50702a21736717b746d7e9d41f2579b6da8a2d6e23bbc39bf9934a3ef44` |
 
 Форматы распознаны штатными инструментами; содержимое deb/rpm/pacman проиндексировано. В compiled main присутствуют public MCP redaction и runtime guard status, в renderer bundle — соответствующие Recovery/Integrations проекции.
 
