@@ -70,7 +70,7 @@ describe("cli.error", () => {
       modelID: "claude-sonet-4",
       suggestions: ["claude-sonnet-4"],
     }
-    const expected = [
+const expected = [
       "Model not found: anthropic/claude-sonet-4",
       "Did you mean: claude-sonnet-4",
       "Try: `nova-cli models` to list available models",
