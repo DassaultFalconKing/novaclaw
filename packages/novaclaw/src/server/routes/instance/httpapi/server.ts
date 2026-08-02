@@ -382,23 +382,48 @@ export function createRoutes(
 
 export const routes = createRoutes()
 
-let prebuilt: { handler: (request: Request, context?: Context.Context<never>) => Promise<Response>; dispose: () => Promise<void> } | undefined = undefined
+type WebHandler = (
+  request: Request,
+  context?: Context.Context<unknown>,
+) => Promise<Response>
+
+type PrebuiltWebHandler = {
+  readonly handler: WebHandler
+  readonly dispose: Effect.Effect<void>
+}
+
+let prebuilt: PrebuiltWebHandler | undefined = undefined
+
+const fallbackWebHandler = lazy(() =>
+  HttpRouter.toWebHandler(routes, { disableLogger: true, memoMap, middleware: disposeMiddleware }),
+)
 
 export const buildWebHandler = Effect.gen(function* () {
+  if (prebuilt) {
+    return prebuilt
+  }
+
   const scope = Scope.makeUnsafe()
   const fullLayer = Layer.provideMerge(routes, HttpRouter.layer)
-  const context = yield* Layer.buildWithMemoMap(memoMap, scope)(fullLayer)
-  const httpRouter = Context.get(context, HttpRouter as unknown as any) as any
-  const handler = HttpEffect.toWebHandlerWith(context)(
-    yield* Effect.succeed(httpRouter.asHttpEffect()),
+  const ctx = yield* Layer.buildWithMemoMap(memoMap, scope)(fullLayer)
+  const httpRouter = Context.get(ctx, HttpRouter as unknown as any) as any
+  const httpEffect = httpRouter.asHttpEffect()
+  const handler = HttpEffect.toWebHandlerWith(ctx)(
+    httpEffect,
     disposeMiddleware,
-  )
-  prebuilt = { handler, dispose: () => Effect.runPromise(Scope.close(scope, Exit.void)).then(() => undefined) }
+  ) as unknown as WebHandler
+  prebuilt = {
+    handler,
+    dispose: Scope.close(scope, Exit.void),
+  }
   return prebuilt
 })
 
 export { prebuilt }
 
-export const webHandler = lazy(() => (prebuilt?.handler ?? HttpRouter.toWebHandler(routes, { disableLogger: true, memoMap, middleware: disposeMiddleware })) as (request: Request, context?: Context.Context<never>) => Promise<Response>)
+export const webHandler = (): WebHandler & { handler: WebHandler } => {
+  const h = prebuilt?.handler ?? (fallbackWebHandler() as unknown as WebHandler)
+  return Object.assign(h, { handler: h })
+}
 
 export * as HttpApiApp from "./server"
