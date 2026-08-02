@@ -2,6 +2,8 @@ import { PermissionRuleset } from "@novaclaw/schema/permission-ruleset"
 import { LayerNode } from "@novaclaw/core/effect/layer-node"
 import { describe, test, expect } from "bun:test"
 import { Effect } from "effect"
+import fs from "fs/promises"
+import path from "path"
 import { Permission } from "../src/permission"
 import { Config } from "@/config/config"
 import { testEffect } from "./lib/effect"
@@ -145,10 +147,32 @@ describe("Permission.disabled for task tool", () => {
 
 // Integration tests that load permissions from real config files
 describe("permission.task with real config files", () => {
+  // Config→SQLite step 9: jsonc files are import/export wire format only — the config service
+  // never reads the instance dir's novaclaw.json, and `permissions` aren't store-backed either.
+  // The one live file source that carries them is the managed config dir, merged on every
+  // loadInstanceState (see src/config/config.ts and test/config/config.test.ts).
+  const managedConfigDir = process.env.NOVACLAW_TEST_MANAGED_CONFIG_DIR!
+
+  const writeManagedConfig = (permissions: Config.Info["permissions"]) =>
+    Effect.gen(function* () {
+      yield* Effect.promise(() =>
+        fs.mkdir(managedConfigDir, { recursive: true }).then(() =>
+          fs.writeFile(
+            path.join(managedConfigDir, "novaclaw.json"),
+            JSON.stringify({ $schema: "https://novaclaw.app/config.json", permissions }, null, 2),
+          ),
+        ),
+      )
+    })
+
   it.instance(
     "loads task permissions from novaclaw.json config",
     () =>
       Effect.gen(function* () {
+        yield* writeManagedConfig([
+          { action: "task", resource: "*", effect: "allow" },
+          { action: "task", resource: "code-reviewer", effect: "deny" },
+        ])
         const config = yield* load
         const ruleset = (config.permissions ?? []).map((r) => ({ permission: r.action, pattern: r.resource, action: r.effect }))
         // general and orchestrator-fast should be allowed, code-reviewer denied
@@ -156,21 +180,16 @@ describe("permission.task with real config files", () => {
         expect(Permission.evaluate("task", "orchestrator-fast", ruleset).action).toBe("allow")
         expect(Permission.evaluate("task", "code-reviewer", ruleset).action).toBe("deny")
       }),
-    {
-      git: true,
-      config: {
-        permissions: [
-          { action: "task", resource: "*", effect: "allow" },
-          { action: "task", resource: "code-reviewer", effect: "deny" },
-        ],
-      },
-    },
   )
 
   it.instance(
     "loads task permissions with wildcard patterns from config",
     () =>
       Effect.gen(function* () {
+        yield* writeManagedConfig([
+          { action: "task", resource: "*", effect: "ask" },
+          { action: "task", resource: "orchestrator-*", effect: "deny" },
+        ])
         const config = yield* load
         const ruleset = (config.permissions ?? []).map((r) => ({ permission: r.action, pattern: r.resource, action: r.effect }))
         // general and code-reviewer should be ask, orchestrator-* denied
@@ -178,21 +197,16 @@ describe("permission.task with real config files", () => {
         expect(Permission.evaluate("task", "code-reviewer", ruleset).action).toBe("ask")
         expect(Permission.evaluate("task", "orchestrator-fast", ruleset).action).toBe("deny")
       }),
-    {
-      git: true,
-      config: {
-        permissions: [
-          { action: "task", resource: "*", effect: "ask" },
-          { action: "task", resource: "orchestrator-*", effect: "deny" },
-        ],
-      },
-    },
   )
 
   it.instance(
     "evaluate respects task permission from config",
     () =>
       Effect.gen(function* () {
+        yield* writeManagedConfig([
+          { action: "task", resource: "general", effect: "allow" },
+          { action: "task", resource: "code-reviewer", effect: "deny" },
+        ])
         const config = yield* load
         const ruleset = (config.permissions ?? []).map((r) => ({ permission: r.action, pattern: r.resource, action: r.effect }))
         expect(Permission.evaluate("task", "general", ruleset).action).toBe("allow")
@@ -200,21 +214,18 @@ describe("permission.task with real config files", () => {
         // Unspecified agents default to "ask"
         expect(Permission.evaluate("task", "unknown-agent", ruleset).action).toBe("ask")
       }),
-    {
-      git: true,
-      config: {
-        permissions: [
-          { action: "task", resource: "general", effect: "allow" },
-          { action: "task", resource: "code-reviewer", effect: "deny" },
-        ],
-      },
-    },
   )
 
   it.instance(
     "mixed permission config with task and other tools",
     () =>
       Effect.gen(function* () {
+        yield* writeManagedConfig([
+          { action: "bash", resource: "*", effect: "allow" },
+          { action: "edit", resource: "*", effect: "ask" },
+          { action: "task", resource: "*", effect: "deny" },
+          { action: "task", resource: "general", effect: "allow" },
+        ])
         const config = yield* load
         const ruleset = (config.permissions ?? []).map((r) => ({ permission: r.action, pattern: r.resource, action: r.effect }))
 
@@ -234,23 +245,17 @@ describe("permission.task with real config files", () => {
         // matching "task" permission is {pattern: "general", action: "allow"}, not pattern: "*"
         expect(disabled.has("task")).toBe(false)
       }),
-    {
-      git: true,
-      config: {
-        permissions: [
-          { action: "bash", resource: "*", effect: "allow" },
-          { action: "edit", resource: "*", effect: "ask" },
-          { action: "task", resource: "*", effect: "deny" },
-          { action: "task", resource: "general", effect: "allow" },
-        ],
-      },
-    },
   )
 
   it.instance(
     "task tool disabled when global deny comes last in config",
     () =>
       Effect.gen(function* () {
+        yield* writeManagedConfig([
+          { action: "task", resource: "general", effect: "allow" },
+          { action: "task", resource: "code-reviewer", effect: "allow" },
+          { action: "task", resource: "*", effect: "deny" },
+        ])
         const config = yield* load
         const ruleset = (config.permissions ?? []).map((r) => ({ permission: r.action, pattern: r.resource, action: r.effect }))
 
@@ -264,22 +269,16 @@ describe("permission.task with real config files", () => {
         const disabled = Permission.disabled(["task"], ruleset)
         expect(disabled.has("task")).toBe(true)
       }),
-    {
-      git: true,
-      config: {
-        permissions: [
-          { action: "task", resource: "general", effect: "allow" },
-          { action: "task", resource: "code-reviewer", effect: "allow" },
-          { action: "task", resource: "*", effect: "deny" },
-        ],
-      },
-    },
   )
 
   it.instance(
     "task tool NOT disabled when specific allow comes last in config",
     () =>
       Effect.gen(function* () {
+        yield* writeManagedConfig([
+          { action: "task", resource: "*", effect: "deny" },
+          { action: "task", resource: "general", effect: "allow" },
+        ])
         const config = yield* load
         const ruleset = (config.permissions ?? []).map((r) => ({ permission: r.action, pattern: r.resource, action: r.effect }))
 
@@ -294,14 +293,5 @@ describe("permission.task with real config files", () => {
         const disabled = Permission.disabled(["task"], ruleset)
         expect(disabled.has("task")).toBe(false)
       }),
-    {
-      git: true,
-      config: {
-        permissions: [
-          { action: "task", resource: "*", effect: "deny" },
-          { action: "task", resource: "general", effect: "allow" },
-        ],
-      },
-    },
   )
 })

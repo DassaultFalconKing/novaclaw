@@ -186,12 +186,13 @@ export const layer = Layer.effect(
       Effect.fn("Agent.state")(function* (ctx) {
         const cfg = yield* config.get()
         const skillDirs = yield* skill.dirs()
-        const referenceDirs = Object.keys(cfg.references ?? {}).length
-          ? yield* Effect.gen(function* () {
-              yield* (yield* PluginV2.Service).wait(PluginV2.ID.make("core/config-reference"))
-              return (yield* (yield* Reference.Service).list()).map((reference) => reference.path)
-            }).pipe(Effect.provide(locations.get(Location.Ref.make({ directory: AbsolutePath.make(ctx.directory) }))))
-          : []
+        // Config→SQLite: `references` no longer appears in the assembled config document (they
+        // moved to the instance-wide ReferenceConfigStore), so the wait+list below must run
+        // unconditionally — gating on `cfg.references` would make the whitelist dead code.
+        const referenceDirs = yield* Effect.gen(function* () {
+          yield* (yield* PluginV2.Service).wait(PluginV2.ID.make("core/config-reference"))
+          return (yield* (yield* Reference.Service).list()).map((reference) => reference.path)
+        }).pipe(Effect.provide(locations.get(Location.Ref.make({ directory: AbsolutePath.make(ctx.directory) }))))
         const whitelistedDirs = [
           Truncate.GLOB,
           path.join(Global.Path.tmp, "*"),
