@@ -110,14 +110,16 @@ export const layer = Layer.effect(
         }
 
         const { Server } = yield* Effect.promise(() => import("../server/server"))
+        const { ServerAuth } = yield* Effect.promise(() => import("@/server/auth"))
+        const { HttpApiApp } = yield* Effect.promise(() => import("@/server/routes/instance/httpapi/server"))
 
         const serverUrl = Server.url
         const client = createNovaclawClient({
           baseUrl: serverUrl?.toString() ?? "http://localhost:4096",
           directory: ctx.directory,
           headers: ServerAuth.headers(),
-          // hey-api types fetch as the GLOBAL fetch (with Bun preconnect); the in-process adapter only needs the call signature.
-          ...(serverUrl ? {} : { fetch: (async (request: Request) => Server.Default().app.fetch(request)) as unknown as typeof fetch }),
+          // hey-api types fetch as the GLOBAL fetch (with Bun preconnect); the in-process adapter uses the prebuilt handler.
+          ...(serverUrl ? {} : { fetch: (async (request: Request) => HttpApiApp.prebuilt!.handler(request)) as unknown as typeof fetch }),
         })
         const cfg = yield* config.get()
         const input: PluginInput = {

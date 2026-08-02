@@ -16,7 +16,7 @@ import type { Argv } from "yargs"
 import path from "path"
 import { pathToFileURL } from "url"
 import { open } from "node:fs/promises"
-import { Effect } from "effect"
+import { Cause, Effect } from "effect"
 import { UI } from "../ui"
 import { effectCmd } from "../effect-cmd"
 import { EOL } from "os"
@@ -251,6 +251,10 @@ export const RunCommand = effectCmd({
     const flags = yield* RuntimeFlags.Service
     const localInstance = yield* InstanceRef
     yield* Effect.promise(async () => {
+      // Prebuild the web handler in-fiber so loggers are inherited and memoMap deduplicates
+      // (avoids the bare Effect.runPromise that leaks console.log to stdout — issues.md P3).
+      const { HttpApiApp } = await import("@/server/routes/instance/httpapi/server")
+      await HttpApiApp.buildWebHandler.pipe(Effect.runPromise).catch(() => undefined)
       const thinking = args.thinking ?? false
 
       // Wall-clock watchdog: a one-shot run that wedges mid-turn (observed live — a stuck
@@ -869,12 +873,11 @@ export const RunCommand = effectCmd({
         await execute(sdk)
       } else {
         const fetchFn = (async (input: RequestInfo | URL, init?: RequestInit) => {
-          const { Server } = await import("@/server/server")
           const request = new Request(input, init)
           const headers = new Headers(request.headers)
           const auth = ServerAuth.header()
           if (auth) headers.set("Authorization", auth)
-          return Server.Default().app.fetch(new Request(request, { headers }))
+          return HttpApiApp.prebuilt!.handler(new Request(request, { headers }))
         }) as typeof globalThis.fetch
         const sdk = createNovaclawClient({
           baseUrl: "http://novaclaw.internal",

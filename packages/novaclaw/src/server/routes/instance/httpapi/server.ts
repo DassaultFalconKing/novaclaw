@@ -1,6 +1,6 @@
-import { Config as EffectConfig, Context, Effect, Layer } from "effect"
+import { Config as EffectConfig, Context, Effect, Exit, Layer, Scope } from "effect"
 import { HttpApiBuilder, OpenApi } from "effect/unstable/httpapi"
-import { HttpMiddleware, HttpRouter, HttpServer, HttpServerResponse } from "effect/unstable/http"
+import { HttpEffect, HttpMiddleware, HttpRouter, HttpServer, HttpServerResponse } from "effect/unstable/http"
 import * as Socket from "effect/unstable/socket/Socket"
 import { FSUtil } from "@novaclaw/core/fs-util"
 import { AgentConfigStore } from "@novaclaw/core/agent-config-store"
@@ -382,12 +382,23 @@ export function createRoutes(
 
 export const routes = createRoutes()
 
-export const webHandler = lazy(() =>
-  HttpRouter.toWebHandler(routes, {
-    disableLogger: true,
-    memoMap,
-    middleware: disposeMiddleware,
-  }),
-)
+let prebuilt: { handler: (request: Request, context?: Context.Context<never>) => Promise<Response>; dispose: () => Promise<void> } | undefined = undefined
+
+export const buildWebHandler = Effect.gen(function* () {
+  const scope = Scope.makeUnsafe()
+  const fullLayer = Layer.provideMerge(routes, HttpRouter.layer)
+  const context = yield* Layer.buildWithMemoMap(memoMap, scope)(fullLayer)
+  const httpRouter = Context.get(context, HttpRouter as unknown as any) as any
+  const handler = HttpEffect.toWebHandlerWith(context)(
+    yield* Effect.succeed(httpRouter.asHttpEffect()),
+    disposeMiddleware,
+  )
+  prebuilt = { handler, dispose: () => Effect.runPromise(Scope.close(scope, Exit.void)).then(() => undefined) }
+  return prebuilt
+})
+
+export { prebuilt }
+
+export const webHandler = lazy(() => (prebuilt?.handler ?? HttpRouter.toWebHandler(routes, { disableLogger: true, memoMap, middleware: disposeMiddleware })) as (request: Request, context?: Context.Context<never>) => Promise<Response>)
 
 export * as HttpApiApp from "./server"
