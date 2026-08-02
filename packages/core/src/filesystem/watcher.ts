@@ -19,7 +19,7 @@ import { Protected } from "./protected"
 
 declare const NOVACLAW_LIBC: string | undefined
 
-const SUBSCRIBE_TIMEOUT_MS = 10_000
+const SUBSCRIBE_TIMEOUT_MS = 60_000
 
 export const Event = FileSystemWatcher.Event
 

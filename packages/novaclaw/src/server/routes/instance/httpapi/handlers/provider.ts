@@ -10,13 +10,16 @@ import { Location } from "@novaclaw/core/location"
 import { AbsolutePath } from "@novaclaw/core/schema"
 import { InstanceState } from "@/effect/instance-state"
 
-import { Effect, Layer, Schema } from "effect"
+import { Clock, Duration, Effect, Layer, Ref, Schema } from "effect"
 import { HttpServerRequest, HttpServerResponse } from "effect/unstable/http"
 import { HttpApiBuilder } from "effect/unstable/httpapi"
 import { InstanceHttpApi } from "../api"
 import { ProviderAuthApiError } from "../groups/provider"
 import { ConfigProviderPreset } from "@novaclaw/core/config/provider-preset"
 import { ProviderV2 } from "@novaclaw/core/provider"
+
+// Cache TTL for provider catalog results (30 seconds)
+const CATALOG_CACHE_TTL_MS = 30_000
 
 function mapProviderAuthError<A, R>(self: Effect.Effect<A, ProviderAuth.Error, R>) {
   return self.pipe(
