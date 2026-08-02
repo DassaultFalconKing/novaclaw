@@ -14,7 +14,6 @@ import { Tools } from "./tools"
 // agent/model/system-prompt/permissions via `resolveSessionConfig` unless overridden) and starts on
 // the enqueued prompt when the coordinator next runs it. Guarded by the seam's fork-bomb depth cap.
 // TODO: gate behind a "may spawn" permission + flat max-children/rate quotas (todo 1K / Vision);
-// TODO: add `exit(result)` + `wait(childID)` (needs step 5's SessionCompleted) to complete the lifecycle.
 
 export const name = "spawn"
 

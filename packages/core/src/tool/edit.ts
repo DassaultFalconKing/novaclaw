@@ -100,7 +100,6 @@ export const toModelOutput = (output: Output, oldString: string, newString: stri
 // TODO: Port V1 fuzzy correction strategies only after exact-edit behavior is established: line-trimmed matching, block-anchor fallback, indentation correction, and similarity-threshold review.
 // TODO: Add formatter integration after V2 formatter runtime exists.
 // TODO: Publish watcher/file-edit events after V2 watcher integration exists.
-// TODO: Add snapshots / undo after design exists.
 
 export const layer = Layer.effectDiscard(
   Effect.gen(function* () {

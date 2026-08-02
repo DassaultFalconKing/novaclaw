@@ -42,7 +42,6 @@ export const toModelOutput = (output: Output) =>
 /** Deferred V2 write UX integrations remain visible at the model-facing seam. */
 // TODO: Add formatter integration after V2 formatter runtime exists.
 // TODO: Publish watcher/file-edit events after V2 watcher integration exists.
-// TODO: Add snapshots / undo after design exists.
 
 export const layer = Layer.effectDiscard(
   Effect.gen(function* () {
