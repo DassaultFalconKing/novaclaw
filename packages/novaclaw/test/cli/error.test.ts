@@ -73,8 +73,8 @@ describe("cli.error", () => {
     const expected = [
       "Model not found: anthropic/claude-sonet-4",
       "Did you mean: claude-sonnet-4",
-      "Try: `novaclaw models` to list available models",
-      "Or check your config (novaclaw.json) provider/model names",
+      "Try: `nova-cli models` to list available models",
+      "Or check the model in Settings → Models (the app) — it may have been renamed or removed",
     ].join("\n")
 
     expect(FormatError({ name: "ProviderModelNotFoundError", data })).toBe(expected)
