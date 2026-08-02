@@ -8,6 +8,12 @@ import { Location } from "@novaclaw/core/location"
 import { Project } from "@novaclaw/core/project"
 import { AbsolutePath } from "@novaclaw/core/schema"
 import { Context, Effect, Layer } from "effect"
+import { appendFileSync } from "node:fs"
+
+function trace(msg: string) {
+  const file = process.env["NOVACLAW_RUN_TRACE"]
+  if (file) appendFileSync(file, `${Date.now()} ${msg}\n`)
+}
 
 export class Service extends Context.Service<Service, EventV2.Interface>()("@novaclaw/EventV2Bridge") {}
 
@@ -46,6 +52,8 @@ export const layer = Layer.effect(
     // and the durable `sync` envelope are the two emits that remain.
     const unsubscribe = yield* events.listen((event) =>
       Effect.gen(function* () {
+        const loc = event.location
+        trace("bridge event " + event.type + (loc ? ` dir=${loc.directory} ws=${loc.workspaceID ?? ""}` : " noloc"))
         const ctx = yield* InstanceRef
         const workspaceID = (yield* WorkspaceRef) ?? event.location?.workspaceID
         GlobalBus.emit("event", {

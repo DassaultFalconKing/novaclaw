@@ -7,6 +7,7 @@ import * as Stream from "effect/Stream"
 import { HttpServerResponse } from "effect/unstable/http"
 import { HttpApiBuilder } from "effect/unstable/httpapi"
 import * as Sse from "effect/unstable/encoding/Sse"
+import { appendFileSync } from "node:fs"
 import { EventApi } from "../groups/event"
 
 function eventData(data: unknown): Sse.Event {
@@ -33,9 +34,18 @@ function eventResponse(events: EventV2.Interface) {
     yield* Effect.addFinalizer(() => unsubscribe)
     const stream = Stream.fromQueue(queue).pipe(
       Stream.filter(
-        (event) =>
-          event.location?.directory === instance.directory &&
-          (event.location.workspaceID === undefined || event.location.workspaceID === workspaceID),
+        (event) => {
+          const pass =
+            event.location?.directory === instance.directory &&
+            (event.location.workspaceID === undefined || event.location.workspaceID === workspaceID)
+          if (process.env["NOVACLAW_RUN_TRACE"]) {
+            appendFileSync(
+              process.env["NOVACLAW_RUN_TRACE"],
+              `${Date.now()} sse-filter event=${event.type} pass=${pass} dir=${event.location?.directory} instDir=${instance.directory}\n`,
+            )
+          }
+          return pass
+        },
       ),
       Stream.map((event) => ({ id: event.id, type: event.type, properties: event.data })),
     )

@@ -24,6 +24,12 @@ import { Filesystem } from "@/util/filesystem"
 import { createNovaclawClient, type NovaclawClient } from "@novaclaw/sdk/v2"
 import type { ToolPart } from "./run/types"
 import { FormatError, FormatUnknownError } from "../error"
+import { appendFileSync } from "node:fs"
+
+function trace(msg: string) {
+  const file = process.env["NOVACLAW_RUN_TRACE"]
+  if (file) appendFileSync(file, `${Date.now()} ${msg}\n`)
+}
 
 type ModelInput = string
 
@@ -263,7 +269,7 @@ export const RunCommand = effectCmd({
         .map((arg) => (arg.includes(" ") ? `"${arg.replace(/"/g, '\\"')}"` : arg))
         .join(" ")
 
-      const root = Filesystem.resolve(process.env.PWD ?? process.cwd())
+      const root = Filesystem.resolve(process.cwd())
       const directory = (() => {
         if (!args.dir) return args.attach ? undefined : root
         if (args.attach) return args.dir
@@ -450,6 +456,7 @@ export const RunCommand = effectCmd({
           title: name,
           permission: [...rules],
         })
+        trace("session.create done")
         const id = result.data?.data?.id
         if (!id) {
           return
@@ -634,6 +641,8 @@ export const RunCommand = effectCmd({
           }
 
           for await (const event of events.stream) {
+            const props = (event as { properties?: Record<string, unknown> }).properties
+            trace("loop event " + event.type + (props ? " props=" + JSON.stringify(props).slice(0, 140) : ""))
             if (process.env["NOVACLAW_RUN_DEBUG_EVENTS"]) console.error("EVT", event.type)
             const scoped = (event as { properties?: { sessionID?: string } }).properties
             if (scoped?.sessionID !== sessionID) continue
@@ -778,6 +787,7 @@ export const RunCommand = effectCmd({
         const agent = await pickAgent(client)
 
         const events = await client.event.subscribe()
+        trace("subscribe done")
         const completed = loop(client, events).catch((e) => {
           console.error(e)
           process.exitCode = 1
@@ -791,6 +801,7 @@ export const RunCommand = effectCmd({
         // exits before the (possibly remote) turn has run.
         async function finish() {
           const error = await completed
+          trace("loop finished error=" + (error ?? "none"))
           if (error) process.exitCode = 1
         }
 
