@@ -8,9 +8,8 @@ import * as Socket from "effect/unstable/socket/Socket"
 import { WorkspaceV2 } from "@novaclaw/core/workspace"
 import { ControlPaths } from "../../src/server/routes/instance/httpapi/groups/control"
 import { InstancePaths } from "../../src/server/routes/instance/httpapi/groups/instance"
-import { InstancePaths as FencePaths } from "../../src/server/routes/instance/httpapi/groups/instance"
-import { ProjectV2 } from "@novaclaw/core/project"
 import { QuestionID } from "../../src/question/schema"
+import { SessionV2 } from "@novaclaw/core/session"
 import { HttpApiApp } from "../../src/server/routes/instance/httpapi/server"
 import { HEADER as FenceHeader } from "../../src/server/shared/fence"
 import { resetDatabase } from "../fixture/db"
@@ -84,16 +83,20 @@ describe("instance HttpApi", () => {
       )
 
       const dir = yield* tmpdirScoped({ git: true })
-      // V1-nuke slice D: the bare /session create died; any mutating instance route carries the
-      // fence header — app registration is the simplest.
-      const response = yield* HttpClientRequest.post(FencePaths.app).pipe(
+      // /api/session creates a session and writes its durable EventV2 event, which bumps
+      // EventSequenceTable — the source of truth the fence middleware diffs to decide whether
+      // to emit the sync header. A bare app-registration or log POST is not fence-bearing.
+      const response = yield* HttpClientRequest.post("/api/session").pipe(
         directoryHeader(dir),
-        HttpClientRequest.bodyJson({ id: "fence-test", title: "fenced" }),
+        HttpClientRequest.bodyJson({}),
         Effect.flatMap(HttpClient.execute),
       )
 
       expect(response.status).toBe(200)
-      expect(JSON.parse(response.headers[FenceHeader] ?? "{}")).not.toEqual({})
+
+      const fence = JSON.parse(response.headers[FenceHeader] ?? "{}")
+      expect(fence).not.toEqual({})
+      expect(Object.keys(fence).length).toBeGreaterThan(0)
     }),
   )
 
@@ -208,16 +211,17 @@ describe("instance HttpApi", () => {
     }),
   )
 
-  it.live("returns typed not found bodies for missing projects", () =>
+  it.live("returns a typed not found body for a missing session", () =>
     Effect.gen(function* () {
       const dir = yield* tmpdirScoped({ git: true })
-      const projectID = ProjectV2.ID.make("project_missing")
+      const sessionID = SessionV2.ID.create()
       const response = yield* Effect.promise(() =>
         HttpApiApp.webHandler().handler(
-          new Request(`http://localhost/project/${projectID}`, {
-            method: "PATCH",
-            headers: { "x-novaclaw-directory": dir, "content-type": "application/json" },
-            body: JSON.stringify({ name: "Missing" }),
+          new Request(`http://localhost/api/session/${sessionID}`, {
+            method: "GET",
+            headers: {
+              "x-novaclaw-directory": dir,
+            },
           }),
           handlerContext,
         ),
@@ -225,9 +229,9 @@ describe("instance HttpApi", () => {
 
       expect(response.status).toBe(404)
       expect(yield* Effect.promise(() => response.json())).toEqual({
-        _tag: "ProjectNotFoundError",
-        projectID,
-        message: `Project not found: ${projectID}`,
+        _tag: "SessionNotFoundError",
+        sessionID,
+        message: `Session not found: ${sessionID}`,
       })
     }),
   )

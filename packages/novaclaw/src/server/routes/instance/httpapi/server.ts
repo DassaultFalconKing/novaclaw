@@ -398,7 +398,7 @@ const fallbackWebHandler = lazy(() =>
   HttpRouter.toWebHandler(routes, { disableLogger: true, memoMap, middleware: disposeMiddleware }),
 )
 
-export const buildWebHandler = Effect.gen(function* () {
+export const buildWebHandler: Effect.Effect<PrebuiltWebHandler, EffectConfig.ConfigError, never> = Effect.gen(function* () {
   if (prebuilt) {
     return prebuilt
   }
@@ -417,12 +417,16 @@ export const buildWebHandler = Effect.gen(function* () {
     dispose: Scope.close(scope, Exit.void),
   }
   return prebuilt
-})
+}) as Effect.Effect<PrebuiltWebHandler, EffectConfig.ConfigError, never>
+// The `Request<...>` requirements of `Layer.buildWithMemoMap(...)(fullLayer)` are phantom:
+// `HttpRouter.layer` (merged in above) satisfies them at runtime, so the built handler is
+// fully self-contained and safe to run from any runtime (e.g. the CLI's AppRuntime fiber).
 
 export { prebuilt }
 
 export const webHandler = (): WebHandler & { handler: WebHandler } => {
-  const h = prebuilt?.handler ?? (fallbackWebHandler() as unknown as WebHandler)
+  const fallback = fallbackWebHandler() as unknown as { readonly handler: WebHandler }
+  const h = prebuilt?.handler ?? fallback.handler
   return Object.assign(h, { handler: h })
 }
 
